@@ -14,13 +14,13 @@ nb_machines, nb_tasks, nb_jobs, nb_operators = param_size["nb_machines"], param_
 
 interim, unit_penalty, tardiness = parameters_costs["interim"], parameters_costs["unit_penalty"], parameters_costs["tardiness"]
 
-proc_time_task = zeros(Int32, nb_tasks)
+duration_task = zeros(Int32, nb_tasks)
 
 compat_machine_operator_per_task = zeros(Int32, (nb_tasks, nb_machines, nb_operators))
 
 for i=1:nb_tasks
     task = tasks[i];
-    proc_time_task[i] = task["processing_time"];
+    duration_task[i] = task["processing_time"];
     possible_machines = task["machines"];
     for machine in possible_machines
         machine_index = machine["machine"];
@@ -31,24 +31,50 @@ end
 
 
 
+todo_task        = Set{Int64}(1:nb_tasks);
+running_task     = Set{Int64}();
+done_task        = Set{Int64}();
+busy_operator    = Set{Int64}();
+buzy_machine     = Set{Int64}();
 
-running    = Set{Int64}();
-done       = Set{Int64}();
-busy_op    = Set{Int64}();
-buzy_mac   = Set{Int64}();
 
 
 jobs_task_sequences = Dict{Int64, Queue{Int}}();
 jobs_weights        = zeros(Int64, nb_jobs)
+jobs_release_date   = zeros(Int64, nb_jobs)
+jobs_due_date       = zeros(Int64, nb_jobs)
+
+job_of_task         = zeros(Int64,   nb_tasks);
+score_of_task       = zeros(Float64, nb_tasks);
+start_time_of_task  = zeros(Int64, nb_tasks);
 
 
-s = Stack{Int}()
 
-for i=1:nb_jobs
-    jobs_task_sequences[i] = Queue{Int64}();
-    for s in Vector{Int64}(jobs[i]["sequence"])
-        enqueue!(jobs_task_sequences[i], s);
+
+for j=1:nb_jobs # 
+    jobs_task_sequences[j] = Queue{Int64}();
+    for task in Vector{Int64}(jobs[j]["sequence"])
+        enqueue!(jobs_task_sequences[j], task);
+        job_of_task[task] = j
     end
+    jobs_weights[j] = jobs[j]["weight"];
+    jobs_release_date[j] = jobs[j]["release_date"];
+    jobs_due_date[j] = jobs[j]["due_date"];
 end
+
+
+
+
+t = 0; # time
+# while length(done) >= nb_jobs
+    for i in running
+        if start_time_of_task[i] - duration_task[i] + 1 >= t
+            delete(running_task, i);
+            push!(done_task, i);
+        end
+
+    for task in todo:
+    end
+# end
 
 
