@@ -34,9 +34,9 @@ end
 todo_task        = Set{Int64}(1:nb_tasks);
 running_task     = Set{Int64}();
 done_task        = Set{Int64}();
+busy_machine     = Set{Int64}();
 busy_operator    = Set{Int64}();
-buzy_machine     = Set{Int64}();
-
+idle_operator    = Set{Int64}(1:nb_operators);
 
 
 jobs_task_sequences = Dict{Int64, Queue{Int}}();
@@ -48,6 +48,7 @@ job_of_task         = zeros(Int64,   nb_tasks);
 score_of_task       = zeros(Float64, nb_tasks);
 start_time_of_task  = zeros(Int64, nb_tasks);
 
+operator_choice_of_task = zeros(Int64, nb_tasks);
 
 
 
@@ -67,13 +68,25 @@ end
 
 t = 0; # time
 # while length(done) >= nb_jobs
+# mettre à jour les statuts des tâches déjà démarrées
     for i in running
         if start_time_of_task[i] - duration_task[i] + 1 >= t
             delete(running_task, i);
             push!(done_task, i);
+            delete!(busy_operator, operator_choice_of_task[i]);
+            push!(idle_operator, operator_choice_of_task[i]);
         end
 
-    for task in todo:
+    for λ in todo:
+        jt = job_of_task[λ];
+        score = 0;
+        Δt = jobs_due_date[job_of_task[λ]] - t;
+        if Δt <= 0
+            score = 1/Δt * jobs_weights[job_of_task[λ]];
+        else
+            score = 
+        end
+        score_of_task[λ] = 
     end
 # end
 
