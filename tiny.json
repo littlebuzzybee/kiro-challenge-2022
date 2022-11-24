@@ -1,0 +1,664 @@
+{
+    "parameters": {
+        "size": {
+            "nb_jobs": 5,
+            "nb_tasks": 25,
+            "nb_machines": 8,
+            "nb_operators": 8
+        },
+        "costs": {
+            "unit_penalty": 6,
+            "tardiness": 1,
+            "interim": 30
+        }
+    },
+    "jobs": [
+        {
+            "job": 1,
+            "sequence": [
+                1,
+                9,
+                10,
+                15,
+                16
+            ],
+            "release_date": 2,
+            "due_date": 8,
+            "weight": 6
+        },
+        {
+            "job": 2,
+            "sequence": [
+                2,
+                8,
+                14,
+                18,
+                20,
+                22,
+                24
+            ],
+            "release_date": 1,
+            "due_date": 10,
+            "weight": 9
+        },
+        {
+            "job": 3,
+            "sequence": [
+                3,
+                7,
+                19
+            ],
+            "release_date": 6,
+            "due_date": 9,
+            "weight": 3
+        },
+        {
+            "job": 4,
+            "sequence": [
+                4,
+                6,
+                11,
+                12,
+                13,
+                17,
+                21,
+                23,
+                25
+            ],
+            "release_date": 5,
+            "due_date": 19,
+            "weight": 14
+        },
+        {
+            "job": 5,
+            "sequence": [
+                5
+            ],
+            "release_date": 9,
+            "due_date": 10,
+            "weight": 1
+        }
+    ],
+    "tasks": [
+        {
+            "task": 1,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        1,
+                        4,
+                        5,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 2,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 6,
+                    "operators": [
+                        1,
+                        2,
+                        3,
+                        5
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 3,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 4,
+                    "operators": [
+                        1,
+                        4,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 4,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 2,
+                    "operators": [
+                        1,
+                        2,
+                        4,
+                        5,
+                        7
+                    ]
+                },
+                {
+                    "machine": 7,
+                    "operators": [
+                        2,
+                        4,
+                        5,
+                        7,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 5,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 2,
+                    "operators": [
+                        1,
+                        2,
+                        3,
+                        4,
+                        6,
+                        8
+                    ]
+                },
+                {
+                    "machine": 6,
+                    "operators": [
+                        2,
+                        3,
+                        4,
+                        6
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 6,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        1,
+                        2
+                    ]
+                },
+                {
+                    "machine": 3,
+                    "operators": [
+                        2,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 7,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 5,
+                    "operators": [
+                        1,
+                        2,
+                        3,
+                        7,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 8,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 4,
+                    "operators": [
+                        2
+                    ]
+                },
+                {
+                    "machine": 7,
+                    "operators": [
+                        2,
+                        6
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 9,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 6,
+                    "operators": [
+                        1,
+                        2,
+                        4,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 10,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 8,
+                    "operators": [
+                        3,
+                        5,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 11,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        8
+                    ]
+                },
+                {
+                    "machine": 3,
+                    "operators": [
+                        8
+                    ]
+                },
+                {
+                    "machine": 4,
+                    "operators": [
+                        7,
+                        8
+                    ]
+                },
+                {
+                    "machine": 7,
+                    "operators": [
+                        1,
+                        7,
+                        8
+                    ]
+                },
+                {
+                    "machine": 8,
+                    "operators": [
+                        1,
+                        7,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 12,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 2,
+                    "operators": [
+                        2,
+                        3,
+                        4,
+                        7,
+                        8
+                    ]
+                },
+                {
+                    "machine": 3,
+                    "operators": [
+                        2,
+                        3,
+                        4,
+                        5,
+                        7,
+                        8
+                    ]
+                },
+                {
+                    "machine": 5,
+                    "operators": [
+                        2,
+                        3,
+                        4,
+                        5,
+                        7,
+                        8
+                    ]
+                },
+                {
+                    "machine": 7,
+                    "operators": [
+                        2,
+                        7,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 13,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 3,
+                    "operators": [
+                        2,
+                        4,
+                        7
+                    ]
+                },
+                {
+                    "machine": 6,
+                    "operators": [
+                        2,
+                        4,
+                        7,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 14,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        2,
+                        6,
+                        8
+                    ]
+                },
+                {
+                    "machine": 5,
+                    "operators": [
+                        5
+                    ]
+                },
+                {
+                    "machine": 8,
+                    "operators": [
+                        2,
+                        6,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 15,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        2,
+                        4,
+                        7,
+                        8
+                    ]
+                },
+                {
+                    "machine": 7,
+                    "operators": [
+                        4,
+                        7,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 16,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 5,
+                    "operators": [
+                        2,
+                        3,
+                        5,
+                        6,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 17,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 2,
+                    "operators": [
+                        5
+                    ]
+                },
+                {
+                    "machine": 6,
+                    "operators": [
+                        5,
+                        7
+                    ]
+                },
+                {
+                    "machine": 7,
+                    "operators": [
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 18,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        2,
+                        3,
+                        5,
+                        6
+                    ]
+                },
+                {
+                    "machine": 5,
+                    "operators": [
+                        2,
+                        3,
+                        5,
+                        6,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 19,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        4,
+                        5,
+                        7
+                    ]
+                },
+                {
+                    "machine": 2,
+                    "operators": [
+                        1,
+                        4,
+                        5,
+                        7
+                    ]
+                },
+                {
+                    "machine": 6,
+                    "operators": [
+                        4,
+                        7,
+                        8
+                    ]
+                },
+                {
+                    "machine": 8,
+                    "operators": [
+                        1,
+                        7,
+                        8
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 20,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 1,
+                    "operators": [
+                        6,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 21,
+            "processing_time": 2,
+            "machines": [
+                {
+                    "machine": 3,
+                    "operators": [
+                        8
+                    ]
+                },
+                {
+                    "machine": 4,
+                    "operators": [
+                        7
+                    ]
+                },
+                {
+                    "machine": 6,
+                    "operators": [
+                        5,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 22,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 5,
+                    "operators": [
+                        4,
+                        7
+                    ]
+                },
+                {
+                    "machine": 8,
+                    "operators": [
+                        3,
+                        4,
+                        5
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 23,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 3,
+                    "operators": [
+                        5
+                    ]
+                },
+                {
+                    "machine": 5,
+                    "operators": [
+                        7
+                    ]
+                },
+                {
+                    "machine": 8,
+                    "operators": [
+                        5,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 24,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 2,
+                    "operators": [
+                        2,
+                        6
+                    ]
+                },
+                {
+                    "machine": 4,
+                    "operators": [
+                        2,
+                        4,
+                        7
+                    ]
+                }
+            ]
+        },
+        {
+            "task": 25,
+            "processing_time": 1,
+            "machines": [
+                {
+                    "machine": 5,
+                    "operators": [
+                        4,
+                        6,
+                        8
+                    ]
+                },
+                {
+                    "machine": 7,
+                    "operators": [
+                        6,
+                        8
+                    ]
+                },
+                {
+                    "machine": 8,
+                    "operators": [
+                        1,
+                        6,
+                        8
+                    ]
+                }
+            ]
+        }
+    ]
+}
