@@ -38,16 +38,17 @@ busy_op    = Set{Int64}();
 buzy_mac   = Set{Int64}();
 
 
-jobs_task_sequences = Dict{Int64, Vector{Int64}}
+jobs_task_sequences = Dict{Int64, Queue{Int}}();
 jobs_weights        = zeros(Int64, nb_jobs)
 
 
 s = Stack{Int}()
 
 for i=1:nb_jobs
-    jobs_task_sequences[i] = jobs[i]["sequence"];
-    println(typeof(jobs[i]["sequence"]))
-
+    jobs_task_sequences[i] = Queue{Int64}();
+    for s in Vector{Int64}(jobs[i]["sequence"])
+        enqueue!(jobs_task_sequences[i], s);
+    end
 end
 
 
