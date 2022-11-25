@@ -37,14 +37,18 @@ end
 task_set               = Set{Int64}(1:nb_tasks)
 todo_tasks             = Set{Int64}()
 nb_tasks_per_job       = zeros(Int64, nb_jobs)
+
 running_tasks          = Set{Int64}()
 done_tasks             = Set{Int64}()
-running_jobs           = Set{Int64}()
 done_jobs              = Set{Int64}()
-busy_machines          = Set{Int64}()
-busy_operators         = Set{Int64}()
-idle_operators         = Set{Int64}(1:nb_operators)
-busy_mach_op           = zeros(Bool, nb_machines, nb_operators)
+
+busy_machines          = zeros(Bool, nb_machines)
+busy_operators         = zeros(Bool, nb_operators)
+running_jobs           = zeros(Bool, nb_jobs)
+
+
+# idle_operators
+# busy_mach_op           = zeros(Bool, nb_machines, nb_operators)
 # busy_mach_op encode en un seul tableau les couples machine_opérateur disponibles
 
 
@@ -56,7 +60,7 @@ jobs_due_date       = zeros(Int64, nb_jobs)
 job_of_task         = zeros(Int64, nb_tasks)
 
 score_of_task       = zeros(Float64, nb_tasks)
-# score_of_task[τ] est réévalué à chaque étape de temps τ pour les tâches envisagées
+# ce tableau est réévalué à chaque étape de temps t pour les tâches τ envisagées
 
 start_time_of_task      = zeros(Int64, nb_tasks)
 operator_choice_of_task = zeros(Int64, nb_tasks)
@@ -106,20 +110,21 @@ t = 1; # time
     for τ in running_tasks # mettre à jour les statuts des tâches déjà démarrées: ont-elles terminé ?
         if start_time_of_task[τ] - duration_task[τ] + 1 >= t
             delete(running_tasks, τ);
-             push!(done_tasks,    τ);
-            delete(running_jobs,  job_of_task[τ]);
+            push!(done_tasks,    τ);
 
-            delete!(busy_operators, operator_choice_of_task[τ]);
-              push!(idle_operators, operator_choice_of_task[τ]);
-            busy_mach_op[machine_choice_of_task[τ], operator_choice_of_task[τ]] = false; 
+            running_jobs[job_of_task[τ]] = false;
+
+            busy_machines[machine_choice_of_task[τ]]   = false;
+            busy_operators[operator_choice_of_task[τ]] = false;
         end
     end
     
 
-    for j in 1:nb_jobs # mettre à jour les tâches nouvelles à faire en dépilant les séquences des jobs
-        if ~(j in running_jobs) # dernière tâche du job finie ou bien job pas encore commencé
-            τ = dequeue!(jobs_task_sequences[j]);
-            push!(todo_tasks, τ);
+    for γ in 1:nb_jobs # mettre à jour les tâches nouvelles à faire en dépilant les séquences des jobs
+        if ~running_jobs[γ] && ~isempty(todo_tasks) # dernière tâche du job finie ou bien job pas encore commencé et il reste des tâches
+            τ = dequeue!(jobs_task_sequences[γ]);
+            push!(todo_tasks, τ);  # on passe à la tâche suivante
+
         end
     end
 
@@ -140,11 +145,15 @@ t = 1; # time
     for i=1:size(priority)[1]
         task_to_assign = todo_tasks_vec[priority[i]]; # renvoie: le numéro de la i-ème tâche la plus importante (numéro i, i ∈ 1,...)
         compat_machine_operator_per_task[task_to_assign,:,:]; # difficulté: assigner un couple opérateur-machine qui optimisera les ressources à l'étape suivantes
-        available_resources = compat_machine_operator_per_task[task_to_assign,:,:] .& .~busy_mach_op;
+        busy_resources       = Matrix{Bool}(busy_operators*busy_machines');
+        compatible_resources = compat_machine_operator_per_task[task_to_assign,:,:];
+        available_resources  = compatible_resources .& .~busy_resources;
+        
         if any(available_resources)
             solutions = findall(x -> x == true, available_resources); # renvoie un vecteur de coordonnées cartésiennes encodant tous les choix possibles de couples (machine, opérateur)
             s = size(solutions)[1]; # nombre de solutions pour cette tâche
-            c =  rand(1:s);         # on en choisit une au hasard
+            c =  rand(1:s);         # on en choisit une au hasard # À AMÉLIORER
+
             # pour une amélioration, calculer le sous ensemble maximisant les tâches réalisées en fonction /  option 1: du nombre de tâches démarrées option 2: 
             choice_machine  = solutions[c][1];
             choice_operator = solutions[c][2];
@@ -153,9 +162,12 @@ t = 1; # time
             operator_choice_of_task[task_to_assign] = choice_operator;
             start_time_of_task[task_to_assign]      = t;
 
-            push!(running_jobs,  job_of_task[task_to_assign]);
-            push!(busy_operators, choice_operator);
-            push!(busy_machines, choice_machine);
-            busy_mach_op[choice_machine, choice_operator] = true; 
+            println("starting task $task_to_assign");
+            push!(running_tasks, task_to_assign);
+            running_jobs[job_of_task[task_to_assign]] = true;
+
+            busy_operators[choice_operator]  = true; println("starting operator $(choice_operator)")
+            busy_machines[choice_machine]    = true; println("starting machine $(choice_machine)")
+
         end
     end 
