@@ -46,6 +46,7 @@ busy_machines          = zeros(Bool, nb_machines)
 busy_operators         = zeros(Bool, nb_operators)
 running_jobs           = zeros(Bool, nb_jobs)
 
+busy_resources         = zeros(Bool, nb_machines, nb_operators)
 
 # idle_operators
 # busy_mach_op           = zeros(Bool, nb_machines, nb_operators)
@@ -121,7 +122,7 @@ t = 1; # time
     
 
     for γ in 1:nb_jobs # mettre à jour les tâches nouvelles à faire en dépilant les séquences des jobs
-        if ~running_jobs[γ] && ~isempty(todo_tasks) # dernière tâche du job finie ou bien job pas encore commencé et il reste des tâches
+        if ~running_jobs[γ] && ~isempty(jobs_task_sequences[γ]) # dernière tâche du job finie ou bien job pas encore commencé et il reste des tâches
             τ = dequeue!(jobs_task_sequences[γ]);
             push!(todo_tasks, τ);  # on passe à la tâche suivante
 
@@ -141,16 +142,18 @@ t = 1; # time
     todo_tasks_vec = collect(todo_tasks);
     priority = reverse(sortperm(score_of_task[todo_tasks_vec])); # trié dans l'ordre croissant sans le rev
     # mxval, mxindx = findmax(collect(score_of_task));
+    tasks_to_assign = todo_tasks_vec[priority]
 
-    for i=1:size(priority)[1]
-        task_to_assign = todo_tasks_vec[priority[i]]; # renvoie: le numéro de la i-ème tâche la plus importante (numéro i, i ∈ 1,...)
-        compat_machine_operator_per_task[task_to_assign,:,:]; # difficulté: assigner un couple opérateur-machine qui optimisera les ressources à l'étape suivantes
-        busy_resources       = Matrix{Bool}(busy_operators*busy_machines');
-        compatible_resources = compat_machine_operator_per_task[task_to_assign,:,:];
-        available_resources  = compatible_resources .& .~busy_resources;
+    for τ in tasks_to_assign # for i=1:size(tasks_to_assign)[1]
+        # en itérant sur les tâches les plus importantes par ordre décroissantà mesure que l'on parcourt les index (numéro i, i ∈ 1,...)
+
+        busy_resources       .= Matrix{Bool}(ones(Bool, nb_machines)*busy_operators' .| busy_machines*ones(Bool, nb_operators)')[:,:]; # calcul opérateur occupé OU LOGIQUE machine occupée
+        compatible_resources = compat_machine_operator_per_task[τ,:,:];
+        possible_resources  = compatible_resources .& .~busy_resources; # couple (machine, opérateur) dispo SSI c'est compatible et disponible
+
         
-        if any(available_resources)
-            solutions = findall(x -> x == true, available_resources); # renvoie un vecteur de coordonnées cartésiennes encodant tous les choix possibles de couples (machine, opérateur)
+        if any(possible_resources)
+            solutions = findall(x -> x == true, possible_resources); # renvoie un vecteur de coordonnées cartésiennes encodant tous les choix possibles de couples (machine, opérateur)
             s = size(solutions)[1]; # nombre de solutions pour cette tâche
             c =  rand(1:s);         # on en choisit une au hasard # À AMÉLIORER
 
@@ -158,16 +161,16 @@ t = 1; # time
             choice_machine  = solutions[c][1];
             choice_operator = solutions[c][2];
 
-            machine_choice_of_task[task_to_assign]  = choice_machine;
-            operator_choice_of_task[task_to_assign] = choice_operator;
-            start_time_of_task[task_to_assign]      = t;
+            machine_choice_of_task[τ]  = choice_machine;
+            operator_choice_of_task[τ] = choice_operator;
+            start_time_of_task[τ]      = t;
 
-            println("starting task $task_to_assign");
-            push!(running_tasks, task_to_assign);
-            running_jobs[job_of_task[task_to_assign]] = true;
+            println("Task $τ");
+            push!(running_tasks, τ);
+            running_jobs[job_of_task[τ]] = true;
 
-            busy_operators[choice_operator]  = true; println("starting operator $(choice_operator)")
-            busy_machines[choice_machine]    = true; println("starting machine $(choice_machine)")
-
+            busy_operators[choice_operator]  = true;
+            busy_machines[choice_machine]    = true;
+            println("operator $(choice_operator) starting machine $(choice_machine)")
         end
     end 
