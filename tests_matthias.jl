@@ -77,9 +77,25 @@ end
 
 
 
-function duration(d::Queue{Int64})
-    return sum(collect(q));
+function importance( 
+        Δt::Int,
+        γ::Int,
+        β::Int,
+        jobs_task_sequences::Dict{Int64, Queue{Int64}},
+        jobs_weights::Vector{Int64}
+        )
+    
+    # multiples à ajuster: hyperparamètre
+    if Δt ≤ 0 # job pas en retard
+        return 1/Δt * β * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
+        # importance ∝ au poids du job, paramètre β, et inversement ∝ au temps restant pour finir le job
+    else # job en retard
+        return return abs(Δt) * α * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
+        # importance ∝ au poids du job, paramètre α, et ∝ au retard abs(Δt)
+    end
 end
+
+
 
 
 t = 0; # time
@@ -110,12 +126,8 @@ t = 0; # time
     for τ in todo_tasks
         γ = job_of_task[τ];
         Δt = jobs_due_date[γ] - t;
-        if Δt <= 0 # job pas (encore) retard
-            λ = 1/Δt * β * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
-            # fonction importance ∝ temps restant pour finir le job, son poids, paramètre β, et inversement ∝ 
-        else
-            λ = -Δt * α * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
-        end
+        λ = importance_on_time(Δt, γ, β, jobs_task_sequences, jobs_weights);
+            
         score_of_task[τ] = λ;
         # mxval, mxindx = findmax(collect(score_of_task));
         priority = reverse(sortperm(score_of_task));
