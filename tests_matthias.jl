@@ -11,8 +11,8 @@ jobs       = instance["jobs"]
 param_size       = parameters["size"]
 parameters_costs = parameters["costs"]
 
-α = parameters_costs["unit_penalty"];
-β = parameters_costs["tardiness"];
+α = parameters_costs["unit_penalty"]
+β = parameters_costs["tardiness"]
 
 nb_machines, nb_tasks, nb_jobs, nb_operators = param_size["nb_machines"], param_size["nb_tasks"], param_size["nb_jobs"], param_size["nb_operators"]
 
@@ -99,7 +99,7 @@ end
 
 
 
-t = 0; # time
+t = 1; # time
 # while length(done) >= nb_jobs
 
 
@@ -126,28 +126,36 @@ t = 0; # time
 
 
     for τ in todo_tasks
-        γ = job_of_task[τ];
+        γ  = job_of_task[τ];
         Δt = jobs_due_date[γ] - t;
-        λ = importance_on_time(Δt, γ, β, jobs_task_sequences, jobs_weights);
+        λ  = importance_on_time(Δt, γ, β, jobs_task_sequences, jobs_weights);
         score_of_task[τ] = λ;
     end
         
         
-    priority = reverse(sortperm(score_of_task)); # trié dans l'ordre croissant sans le rev
+    todo_tasks_vec = collect(todo_tasks);
+    priority = reverse(sortperm(score_of_task[todo_tasks_vec])); # trié dans l'ordre croissant sans le rev
     # mxval, mxindx = findmax(collect(score_of_task));
 
-    for i=1:size(priority)
-        task_to_assign = priority[i]; # commencer par la tâche la plus importante (numéro i, i ∈ 1,...)
+    for i=1:size(priority)[1]
+        task_to_assign = todo_tasks_vec[priority[i]]; # renvoie: le numéro de la i-ème tâche la plus importante (numéro i, i ∈ 1,...)
         compat_machine_operator_per_task[task_to_assign,:,:]; # difficulté: assigner un couple opérateur-machine qui optimisera les ressources à l'étape suivantes
-        available_resources = compat_machine_operator_per_task[task_to_assign,:,:] .& .~ busy_mach_op;
+        available_resources = compat_machine_operator_per_task[task_to_assign,:,:] .& .~busy_mach_op;
         if any(available_resources)
-            solutions = findall(x -> x == true, available_resources); # renvoie un vecteur de coordonnées cartésiennes
+            solutions = findall(x -> x == true, available_resources); # renvoie un vecteur de coordonnées cartésiennes encodant tous les choix possibles de couples (machine, opérateur)
             s = size(solutions)[1]; # nombre de solutions pour cette tâche
             c =  rand(1:s);         # on en choisit une au hasard
             # pour une amélioration, calculer le sous ensemble maximisant les tâches réalisées en fonction /  option 1: du nombre de tâches démarrées option 2: 
-            machine_choice_of_task[task_to_assign]  = solutions[c][1];
-            operator_choice_of_task[task_to_assign] = solutions[c][2];
+            choice_machine  = solutions[c][1];
+            choice_operator = solutions[c][2];
+
+            machine_choice_of_task[task_to_assign]  = choice_machine;
+            operator_choice_of_task[task_to_assign] = choice_operator;
             start_time_of_task[task_to_assign]      = t;
 
+            push!(running_jobs,  job_of_task[task_to_assign]);
+            push!(busy_operators, choice_operator);
+            push!(busy_machines, choice_machine);
+            busy_mach_op[choice_machine, choice_operator] = true; 
         end
     end 
