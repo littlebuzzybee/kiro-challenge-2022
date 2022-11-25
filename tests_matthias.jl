@@ -53,11 +53,12 @@ jobs_weights        = zeros(Int64, nb_jobs)
 jobs_release_date   = zeros(Int64, nb_jobs)
 jobs_due_date       = zeros(Int64, nb_jobs)
 
-job_of_task         = zeros(Int64,   nb_tasks)
+job_of_task         = zeros(Int64, nb_tasks)
 
 score_of_task       = zeros(Float64, nb_tasks)
-start_time_of_task  = zeros(Int64, nb_tasks)
+# score_of_task[τ] est réévalué à chaque étape de temps τ pour les tâches envisagées
 
+start_time_of_task      = zeros(Int64, nb_tasks)
 operator_choice_of_task = zeros(Int64, nb_tasks)
 machine_choice_of_task  = zeros(Int64, nb_tasks)
 
@@ -110,8 +111,9 @@ t = 0; # time
 
             delete!(busy_operators, operator_choice_of_task[τ]);
               push!(idle_operators, operator_choice_of_task[τ]);
-            busy_mach_op[machine_choice_of_task[τ], operator_choice_of_task[τ]] = 0; 
+            busy_mach_op[machine_choice_of_task[τ], operator_choice_of_task[τ]] = false; 
         end
+    end
     
 
     for j in 1:nb_jobs # mettre à jour les tâches nouvelles à faire en dépilant les séquences des jobs
@@ -127,19 +129,25 @@ t = 0; # time
         γ = job_of_task[τ];
         Δt = jobs_due_date[γ] - t;
         λ = importance_on_time(Δt, γ, β, jobs_task_sequences, jobs_weights);
-            
         score_of_task[τ] = λ;
-        # mxval, mxindx = findmax(collect(score_of_task));
-        priority = reverse(sortperm(score_of_task));
-
-        assign = true; i = 1; # commencer par la tâche la plus importante (numéro 1)
-        while assign # pour chaque tâche en attente
-            task_to_assign = priority[i];
-            compat_machine_operator_per_task[task_to_assign,:,:]; # difficulté: assigner un couple opérateur-machine qui optimisera les ressources à l'étape suivantes
-            available_resources =  compat_machine_operator_per_task[task_to_assign,:,:] .& .~ busy_mach_op;
-            if any(available_resources)
-                # c'est possible: on l'assigne
-            end
-        end 
-
     end
+        
+        
+    priority = reverse(sortperm(score_of_task)); # trié dans l'ordre croissant sans le rev
+    # mxval, mxindx = findmax(collect(score_of_task));
+
+    for i=1:size(priority)
+        task_to_assign = priority[i]; # commencer par la tâche la plus importante (numéro i, i ∈ 1,...)
+        compat_machine_operator_per_task[task_to_assign,:,:]; # difficulté: assigner un couple opérateur-machine qui optimisera les ressources à l'étape suivantes
+        available_resources = compat_machine_operator_per_task[task_to_assign,:,:] .& .~ busy_mach_op;
+        if any(available_resources)
+            solutions = findall(x -> x == true, available_resources); # renvoie un vecteur de coordonnées cartésiennes
+            s = size(solutions)[1]; # nombre de solutions pour cette tâche
+            c =  rand(1:s);         # on en choisit une au hasard
+            # pour une amélioration, calculer le sous ensemble maximisant les tâches réalisées en fonction /  option 1: du nombre de tâches démarrées option 2: 
+            machine_choice_of_task[task_to_assign]  = solutions[c][1];
+            operator_choice_of_task[task_to_assign] = solutions[c][2];
+            start_time_of_task[task_to_assign]      = t;
+
+        end
+    end 
