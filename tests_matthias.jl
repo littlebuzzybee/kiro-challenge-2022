@@ -34,34 +34,39 @@ for i=1:nb_tasks
 end
 
 
+task_set               = Set{Int64}(1:nb_tasks)
+todo_tasks             = Set{Int64}()
+nb_tasks_per_job       = zeros(Int64, nb_jobs)
+running_tasks          = Set{Int64}()
+done_tasks             = Set{Int64}()
+running_jobs           = Set{Int64}()
+done_jobs              = Set{Int64}()
+busy_machines          = Set{Int64}()
+busy_operators         = Set{Int64}()
+idle_operators         = Set{Int64}(1:nb_operators)
+busy_mach_op           = zeros(Bool, nb_machines, nb_operators)
+# busy_mach_op encode en un seul tableau les couples machine_opérateur disponibles
 
-todo_tasks        = Set{Int64}(1:nb_tasks);
-todo_nb_tasks     = zeros(Int64, nb_jobs);
-running_tasks     = Set{Int64}();
-done_tasks        = Set{Int64}();
-busy_machines     = Set{Int64}();
-busy_operators    = Set{Int64}();
-idle_operators    = Set{Int64}(1:nb_operators);
 
-
-jobs_task_sequences = Dict{Int64, Queue{Int}}();
+jobs_task_sequences = Dict{Int64, Queue{Int}}()
 jobs_weights        = zeros(Int64, nb_jobs)
 jobs_release_date   = zeros(Int64, nb_jobs)
 jobs_due_date       = zeros(Int64, nb_jobs)
 
 job_of_task         = zeros(Int64,   nb_tasks)
+
 score_of_task       = zeros(Float64, nb_tasks)
 start_time_of_task  = zeros(Int64, nb_tasks)
 
 operator_choice_of_task = zeros(Int64, nb_tasks)
 machine_choice_of_task  = zeros(Int64, nb_tasks)
-curr_busy_mach_op = rand(Bool, nb_machines, nb_operators); # remplacer par des zéros à la fin
 
 
 
-for j=1:nb_jobs # 
+
+for j=1:nb_jobs 
     jobs_task_sequences[j] = Queue{Int64}();
-    for task in Vector{Int64}(jobs[j]["sequence"])
+    for task in Vector{Int64}(jobs[j]["sequence"]) # remplir les queues de tâches pour tous les jobs
         enqueue!(jobs_task_sequences[j], task);
         job_of_task[task] = j
     end
@@ -72,29 +77,44 @@ end
 
 
 
+function duration(d::Queue{Int64})
+    return sum(collect(q));
+end
+
 
 t = 0; # time
 # while length(done) >= nb_jobs
-# mettre à jour les statuts des tâches déjà démarrées
-    for i in running_tasks
-        if start_time_of_task[i] - duration_task[i] + 1 >= t
-            delete(running_tasks, i);
-            push!(done_tasks, i);
-            delete!(busy_operators, operator_choice_of_task[i]);
-            push!(idle_operators, operator_choice_of_task[i]);
-            curr_busy_mach_op[machine_choice_of_task[i], operator_choice_of_task[i]] = 0; 
+
+
+    for τ in running_tasks # mettre à jour les statuts des tâches déjà démarrées: ont-elles terminé ?
+        if start_time_of_task[τ] - duration_task[τ] + 1 >= t
+            delete(running_tasks, τ);
+             push!(done_tasks,    τ);
+            delete(running_jobs,  job_of_task[τ]);
+
+            delete!(busy_operators, operator_choice_of_task[τ]);
+              push!(idle_operators, operator_choice_of_task[τ]);
+            busy_mach_op[machine_choice_of_task[τ], operator_choice_of_task[τ]] = 0; 
         end
     
-    
-        push!(todo_tasks, τ);
 
-    for τ in todo_tasks: 
-        jt = job_of_task[τ];
-        Δt = jobs_due_date[jt] - t;
-        if Δt <= 0
-            λ = 1/Δt * todo_nb_tasks[jt] * jobs_weights[jt];
+    for j in 1:nb_jobs # mettre à jour les tâches nouvelles à faire en dépilant les séquences des jobs
+        if ~(j in running_jobs) # dernière tâche du job finie ou bien job pas encore commencé
+            τ = dequeue!(jobs_task_sequences[j]);
+            push!(todo_tasks, τ);
+        end
+    end
+
+
+
+    for τ in todo_tasks
+        γ = job_of_task[τ];
+        Δt = jobs_due_date[γ] - t;
+        if Δt <= 0 # job pas (encore) retard
+            λ = 1/Δt * β * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
+            # fonction importance ∝ temps restant pour finir le job, son poids, paramètre β, et inversement ∝ 
         else
-            λ = -Δt * todo_nb_tasks[jt] * jobs_weights[jt]; 
+            λ = -Δt * α * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
         end
         score_of_task[τ] = λ;
         # mxval, mxindx = findmax(collect(score_of_task));
@@ -104,7 +124,7 @@ t = 0; # time
         while assign # pour chaque tâche en attente
             task_to_assign = priority[i];
             compat_machine_operator_per_task[task_to_assign,:,:]; # difficulté: assigner un couple opérateur-machine qui optimisera les ressources à l'étape suivantes
-            available_resources =  compat_machine_operator_per_task[task_to_assign,:,:] .& .~ curr_busy_mach_op;
+            available_resources =  compat_machine_operator_per_task[task_to_assign,:,:] .& .~ busy_mach_op;
             if any(available_resources)
                 # c'est possible: on l'assigne
             end
