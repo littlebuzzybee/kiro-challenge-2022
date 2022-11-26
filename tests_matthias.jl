@@ -97,7 +97,7 @@ function importance(
     
     # multiples à ajuster: hyperparamètre
     if Δt ≤ 0 # job pas en retard
-        return 1/Δt * β * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
+        return 5/Δt * β * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
         # importance ∝ au poids du job, paramètre β, et inversement ∝ au temps restant pour finir le job
     else # job en retard
         return return abs(Δt) * α * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
@@ -109,10 +109,9 @@ end
 
 
 t = 1; # time
-# while length(done) >= nb_jobs
-
+io = open("C:/Users/matth/Documents/GitHub/kiro-challenge-2022/log_algo.txt", "w");
 while (length(done_tasks) < nb_tasks) & (t < 100)
-    println("=== Time $t ===")
+    write(io, "=== Time $t ===\n");
     for τ in running_tasks # mettre à jour les statuts des tâches déjà démarrées: ont-elles terminé ?
         if t - start_time_of_task[τ] >= duration_task[τ] + 1
             delete!(running_tasks, τ);
@@ -122,7 +121,12 @@ while (length(done_tasks) < nb_tasks) & (t < 100)
 
             busy_machines[machine_choice_of_task[τ]]   = false;
             busy_operators[operator_choice_of_task[τ]] = false;
-            println("Finishing task $τ");
+            write(io, "Finishing task $τ\n");
+            if τ in last_task_of_jobs
+                γ = job_of_task[τ];
+                jobs_complete_time[γ] = t
+                write(io, "Completing job $γ\n");
+            end
         end
     end
     
@@ -131,10 +135,7 @@ while (length(done_tasks) < nb_tasks) & (t < 100)
         if ~running_jobs[γ] && ~isempty(jobs_task_sequences[γ]) # dernière tâche du job finie ou bien job pas encore commencé et il reste des tâches: on les ajoute à la liste des todo
             τ = dequeue!(jobs_task_sequences[γ]);
             push!(todo_tasks, τ);  # on passe à la tâche suivante
-            println("Adding task $τ to the queue");
-        end
-        if ~running_jobs[γ] && isempty(jobs_task_sequences[γ])
-            jobs_complete_time[γ] = t
+            write(io, "Adding task $τ to the queue\n");
         end
     end
 
@@ -151,7 +152,7 @@ while (length(done_tasks) < nb_tasks) & (t < 100)
     priority = reverse(sortperm(score_of_task[todo_tasks_vec])); # trié dans l'ordre croissant sans le rev
     # mxval, mxindx = findmax(collect(score_of_task));
     tasks_to_assign = todo_tasks_vec[priority];
-    println("Tasks to assign: $tasks_to_assign\n");
+    write(io, "Tasks to assign: $tasks_to_assign\n\n");
 
     for τ in tasks_to_assign # for i=1:size(tasks_to_assign)[1]
         # en itérant sur les tâches les plus importantes par ordre décroissantà mesure que l'on parcourt les index (numéro i, i ∈ 1,...)
@@ -175,17 +176,19 @@ while (length(done_tasks) < nb_tasks) & (t < 100)
             start_time_of_task[τ]      = t;
             delete!(todo_tasks, τ);
 
-            println("= Commencing task $τ of Job $(job_of_task[τ])");
+            write(io, "= Commencing task $τ of Job $(job_of_task[τ])\n");
             push!(running_tasks, τ);
             running_jobs[job_of_task[τ]] = true;
 
             busy_operators[choice_operator]  = true;
             busy_machines[choice_machine]    = true;
-            println("operator $(choice_operator) on machine $(choice_machine)");
+            write(io, "operator $(choice_operator) on machine $(choice_machine)\n");
         end
     end 
     t += 1;
+    write(io, "\n\n");
 end
+close(io);
 
 
 function cost(start_time_of_task, duration_task, jobs_due_date)
@@ -203,4 +206,5 @@ function cost(start_time_of_task, duration_task, jobs_due_date)
     end
     return S
 end
+
 
