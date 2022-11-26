@@ -13,12 +13,14 @@ function importation()
     param_size       = parameters["size"]
     parameters_costs = parameters["costs"]
 
-    α = parameters_costs["unit_penalty"]
-    β = parameters_costs["tardiness"]
+
 
     nb_machines, nb_tasks, nb_jobs, nb_operators = param_size["nb_machines"], param_size["nb_tasks"], param_size["nb_jobs"], param_size["nb_operators"]
 
     interim, unit_penalty, tardiness = parameters_costs["interim"], parameters_costs["unit_penalty"], parameters_costs["tardiness"]
+
+    α = parameters_costs["unit_penalty"]
+    β = parameters_costs["tardiness"]
 
     duration_task = zeros(Int32, nb_tasks)
 
@@ -36,6 +38,40 @@ function importation()
     end
     return duration_task, compat_machine_operator_per_task,
             α, β, nb_machines, nb_tasks, nb_jobs, nb_operators
+end
+
+
+
+function initialization(duration_task,
+                compat_machine_operator_per_task,
+                α, β, nb_machines, nb_tasks, nb_jobs, nb_operators)
+
+    jobs_task_sequences  = Dict{Int64, Queue{Int}}()
+    jobs_weights         = zeros(Int64, nb_jobs)
+    jobs_release_date    = zeros(Int64, nb_jobs)
+    jobs_due_date        = zeros(Int64, nb_jobs)
+    last_task_of_jobs    = zeros(Int64, nb_jobs)
+    jobs_completion_time = zeros(Int64, nb_jobs)
+    job_of_task          = zeros(Int64, nb_tasks)
+
+    for γ=1:nb_jobs 
+    jobs_task_sequences[γ] = Queue{Int64}();
+    for τ in Vector{Int64}(jobs[γ]["sequence"]) # remplir les queues de tâches pour tous les jobs
+        enqueue!(jobs_task_sequences[γ], τ);
+        job_of_task[τ] = γ;
+    end
+    jobs_weights[γ] = jobs[γ]["weight"];
+    jobs_release_date[γ] = jobs[γ]["release_date"];
+    jobs_due_date[γ] = jobs[γ]["due_date"];
+    last_task_of_jobs[γ] = last(jobs_task_sequences[γ]);
+    end
+    return jobs_task_sequences,
+            jobs_weights,
+            jobs_release_date,
+            jobs_due_date,
+            last_task_of_jobs,
+            jobs_completion_time,
+            job_of_task
 end
 
 
@@ -59,7 +95,7 @@ function importance(
 end
 
 
-function solution_cost(start_time_of_task, duration_task, jobs_due_date)
+function solution_cost(nb_jobs, jobs_weights, start_time_of_task, duration_task, jobs_due_date, jobs_completion_time)
     S = 0;
     for γ in 1:nb_jobs
         τ = last_task_of_jobs[γ];
@@ -77,38 +113,17 @@ function solution_cost(start_time_of_task, duration_task, jobs_due_date)
 end
 
 
-function initialization()
-    jobs_task_sequences  = Dict{Int64, Queue{Int}}()
-    jobs_weights         = zeros(Int64, nb_jobs)
-    jobs_release_date    = zeros(Int64, nb_jobs)
-    jobs_due_date        = zeros(Int64, nb_jobs)
-    last_task_of_jobs    = zeros(Int64, nb_jobs)
-    jobs_completion_time = zeros(Int64, nb_jobs)
-    job_of_task          = zeros(Int64, nb_tasks)
-
-    for γ=1:nb_jobs 
-        jobs_task_sequences[γ] = Queue{Int64}();
-        for τ in Vector{Int64}(jobs[γ]["sequence"]) # remplir les queues de tâches pour tous les jobs
-            enqueue!(jobs_task_sequences[γ], τ);
-            job_of_task[τ] = γ;
-        end
-        jobs_weights[γ] = jobs[γ]["weight"];
-        jobs_release_date[γ] = jobs[γ]["release_date"];
-        jobs_due_date[γ] = jobs[γ]["due_date"];
-        last_task_of_jobs[γ] = last(jobs_task_sequences[γ]);
-    end
-    return (jobs_task_sequences,
-            jobs_weights,
-            jobs_release_date,
-            jobs_due_date,
-            last_task_of_jobs,
-            jobs_completion_time,
-            job_of_task)
-end
 
 
 
 function distribution()
+    duration_task, compat_machine_operator_per_task,
+    α, β, nb_machines, nb_tasks, nb_jobs, nb_operators = importation();
+
+    jobs_task_sequences, jobs_weights, jobs_release_date, jobs_due_date,
+    last_task_of_jobs, jobs_completion_time, job_of_task = initialization(duration_task, compat_machine_operator_per_task, α, β, nb_machines, nb_tasks, nb_jobs, nb_operators);
+
+
     task_set               = Set{Int64}(1:nb_tasks)
     todo_tasks             = Set{Int64}()
     nb_tasks_per_job       = zeros(Int64, nb_jobs)
@@ -217,7 +232,10 @@ function distribution()
     end
     close(io);
 
-    return solution_cost(start_time_of_task, duration_task, jobs_due_date), start_time_of_task, busy_resources, jobs_release_date
+
+    sol_cost = solution_cost(nb_jobs, jobs_weights, start_time_of_task, duration_task, jobs_due_date, jobs_completion_time);
+
+    return sol_cost, start_time_of_task, busy_resources, jobs_release_date
 end
 
 
