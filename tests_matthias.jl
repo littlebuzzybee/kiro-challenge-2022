@@ -22,7 +22,9 @@ function importation()
     α = parameters_costs["unit_penalty"]
     β = parameters_costs["tardiness"]
 
-    duration_task = zeros(Int32, nb_tasks)
+    duration_task        = zeros(Int64, nb_tasks)
+    job_of_task          = zeros(Int64, nb_tasks)
+    jobs_task_sequences  = Dict{Int64, Queue{Int}}()
 
     compat_machine_operator_per_task = zeros(Bool, (nb_tasks, nb_machines, nb_operators))
 
@@ -36,66 +38,63 @@ function importation()
             compat_machine_operator_per_task[Int64(i), machine_index, possible_operators] .= true;
         end
     end
-    return duration_task, compat_machine_operator_per_task,
-            α, β, nb_machines, nb_tasks, nb_jobs, nb_operators
-end
 
-
-
-function initialization(duration_task,
-                compat_machine_operator_per_task,
-                α, β, nb_machines, nb_tasks, nb_jobs, nb_operators)
-
-    jobs_task_sequences  = Dict{Int64, Queue{Int}}()
     jobs_weights         = zeros(Int64, nb_jobs)
     jobs_release_date    = zeros(Int64, nb_jobs)
     jobs_due_date        = zeros(Int64, nb_jobs)
     last_task_of_jobs    = zeros(Int64, nb_jobs)
-    jobs_completion_time = zeros(Int64, nb_jobs)
-    job_of_task          = zeros(Int64, nb_tasks)
+    
+    
 
     for γ=1:nb_jobs 
-    jobs_task_sequences[γ] = Queue{Int64}();
-    for τ in Vector{Int64}(jobs[γ]["sequence"]) # remplir les queues de tâches pour tous les jobs
-        enqueue!(jobs_task_sequences[γ], τ);
-        job_of_task[τ] = γ;
+        jobs_task_sequences[γ] = Queue{Int64}();
+        for τ in Vector{Int64}(jobs[γ]["sequence"]) # remplir les queues de tâches pour tous les jobs
+            enqueue!(jobs_task_sequences[γ], τ);
+            job_of_task[τ] = γ;
+        end
+        jobs_weights[γ] = jobs[γ]["weight"];
+        jobs_release_date[γ] = jobs[γ]["release_date"];
+        jobs_due_date[γ] = jobs[γ]["due_date"];
+        last_task_of_jobs[γ] = last(jobs_task_sequences[γ]);
     end
-    jobs_weights[γ] = jobs[γ]["weight"];
-    jobs_release_date[γ] = jobs[γ]["release_date"];
-    jobs_due_date[γ] = jobs[γ]["due_date"];
-    last_task_of_jobs[γ] = last(jobs_task_sequences[γ]);
-    end
-    return jobs_task_sequences,
+    
+
+
+    return duration_task, compat_machine_operator_per_task,
+            α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
+            jobs_task_sequences,
             jobs_weights,
             jobs_release_date,
             jobs_due_date,
             last_task_of_jobs,
-            jobs_completion_time,
             job_of_task
 end
 
 
 
-function importance( 
-    Δt::Int,
-    γ::Int,
-    β::Int,
-    jobs_task_sequences::Dict{Int64, Queue{Int64}},
-    jobs_weights::Vector{Int64}
-    )
+
+function importance(Δt::Int, γ::Int, α::Int, β::Int,
+    jobs_task_sequences::Dict{Int64, Queue{Int64}}, jobs_weights::Vector{Int64})
 
     # multiples à ajuster: hyperparamètre
     if Δt ≤ 0 # job pas en retard
-        return 1/Δt * β * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
+        return  jobs_weights[γ] * 1/Δt * β; # * sum(collect(jobs_task_sequences[γ]));
         # importance ∝ au poids du job, paramètre β, et inversement ∝ au temps restant pour finir le job
     else # job en retard
-        return 10*abs(Δt) * α * sum(collect(jobs_task_sequences[γ])) * jobs_weights[γ];
+        return jobs_weights[γ] * 1 * abs(Δt) * α; # * sum(collect(jobs_task_sequences[γ]));
         # importance ∝ au poids du job, paramètre α, et ∝ au retard abs(Δt)
     end
 end
 
 
-function solution_cost(nb_jobs, jobs_weights, start_time_of_task, duration_task, jobs_due_date, jobs_completion_time)
+function solution_cost(nb_jobs::Int64,
+        jobs_weights::Vector{Int64},
+        start_time_of_task::Vector{Int64},
+        duration_task::Vector{Int64},
+        jobs_due_date::Vector{Int64},
+        jobs_completion_time::Vector{Int64},
+        last_task_of_jobs::Vector{Int64},
+        α::Int64, β::Int64)
     S = 0;
     for γ in 1:nb_jobs
         τ = last_task_of_jobs[γ];
@@ -118,13 +117,15 @@ end
 
 function distribution()
     duration_task, compat_machine_operator_per_task,
-    α, β, nb_machines, nb_tasks, nb_jobs, nb_operators = importation();
+            α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
+            jobs_task_sequences,
+            jobs_weights,
+            jobs_release_date,
+            jobs_due_date,
+            last_task_of_jobs,
+            job_of_task = importation();
 
-    jobs_task_sequences, jobs_weights, jobs_release_date, jobs_due_date,
-    last_task_of_jobs, jobs_completion_time, job_of_task = initialization(duration_task, compat_machine_operator_per_task, α, β, nb_machines, nb_tasks, nb_jobs, nb_operators);
-
-
-    task_set               = Set{Int64}(1:nb_tasks)
+    jobs_completion_time   = zeros(Int64, nb_jobs)
     todo_tasks             = Set{Int64}()
     nb_tasks_per_job       = zeros(Int64, nb_jobs)
 
@@ -139,7 +140,7 @@ function distribution()
     busy_resources         = zeros(Bool, nb_machines, nb_operators)
     # busy_resources encodera en un seul tableau les couples machine_opérateur disponibles à chaque étape d'assignation des tâches
 
-    score_of_task       = zeros(Float64, nb_tasks)
+    score_of_task           = zeros(Float64, nb_tasks)
     # ce tableau est réévalué à chaque étape de temps t pour les tâches τ envisagées
 
     start_time_of_task      = zeros(Int64, nb_tasks)
@@ -155,7 +156,7 @@ function distribution()
         for τ in running_tasks # mettre à jour les statuts des tâches déjà démarrées: ont-elles terminé ?
             if t - start_time_of_task[τ] >= duration_task[τ] + 1
                 delete!(running_tasks, τ);
-                push!(done_tasks,    τ);
+                push!(done_tasks, τ);
 
                 running_jobs[job_of_task[τ]] = false;
 
@@ -165,6 +166,7 @@ function distribution()
                 if τ in last_task_of_jobs
                     γ = job_of_task[τ];
                     jobs_completion_time[γ] = t - 1;
+                    push!(done_jobs, γ);
                     write(io, "Completing job $γ\n");
                 end
             end
@@ -184,7 +186,7 @@ function distribution()
         for τ in todo_tasks
             γ  = job_of_task[τ];
             Δt = jobs_due_date[γ] - t;
-            score_of_task[τ] = importance_on_time(Δt, γ, β, jobs_task_sequences, jobs_weights);
+            score_of_task[τ] = importance(Δt, γ, α,  β, jobs_task_sequences, jobs_weights);
         end
             
             
@@ -197,9 +199,9 @@ function distribution()
         for τ in tasks_to_assign # for i=1:size(tasks_to_assign)[1]
             # en itérant sur les tâches les plus importantes par ordre décroissantà mesure que l'on parcourt les index (numéro i, i ∈ 1,...)
 
-            busy_resources       .= Matrix{Bool}(ones(Bool, nb_machines)*busy_operators' .| busy_machines*ones(Bool, nb_operators)')[:,:]; # calcul opérateur occupé OU LOGIQUE machine occupée
+            busy_resources .= Matrix{Bool}(ones(Bool, nb_machines)*busy_operators' .| busy_machines*ones(Bool, nb_operators)')[:,:]; # calcul opérateur occupé OU LOGIQUE machine occupée
             compatible_resources = compat_machine_operator_per_task[τ,:,:];
-            possible_resources  = compatible_resources .& .~busy_resources; # matrice (machine, opérateur) ressource dispo si et seulement si elle est compatible (avec la tâche) et disponible
+            possible_resources   = compatible_resources .& .~busy_resources; # matrice (machine, opérateur) ressource dispo si et seulement si elle est compatible (avec la tâche) et disponible
 
             
             if any(possible_resources)
@@ -232,12 +234,14 @@ function distribution()
     end
     close(io);
 
+    
+    
 
-    sol_cost = solution_cost(nb_jobs, jobs_weights, start_time_of_task, duration_task, jobs_due_date, jobs_completion_time);
-
+    sol_cost = solution_cost(nb_jobs, jobs_weights, start_time_of_task, duration_task, jobs_due_date, jobs_completion_time, last_task_of_jobs, α, β);
     return sol_cost, start_time_of_task, busy_resources, jobs_release_date
 end
 
+@time distribution()
 
 
 
