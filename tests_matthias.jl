@@ -3,7 +3,7 @@ using LinearAlgebra;
 using DataStructures;
 using DataFrames;
 
-function importation()
+function import_init()
     instance = JSON.parsefile("C:/Users/matth/Documents/GitHub/kiro-challenge-2022/instances/huge.json")
 
     parameters = instance["parameters"]
@@ -78,10 +78,10 @@ function importance(Δt::Int, γ::Int, α::Int, β::Int,
 
     # multiples à ajuster: hyperparamètre
     if Δt ≤ 0 # job pas en retard
-        return  jobs_weights[γ] * 1/Δt * β; # * sum(collect(jobs_task_sequences[γ]));
+        return  15*jobs_weights[γ]; # * 1/Δt * β * sum(collect(jobs_task_sequences[γ]));
         # importance ∝ au poids du job, paramètre β, et inversement ∝ au temps restant pour finir le job
     else # job en retard
-        return jobs_weights[γ] * 1 * abs(Δt) * α; # * sum(collect(jobs_task_sequences[γ]));
+        return jobs_weights[γ]; # * 1 * abs(Δt) * α * sum(collect(jobs_task_sequences[γ]));
         # importance ∝ au poids du job, paramètre α, et ∝ au retard abs(Δt)
     end
 end
@@ -99,7 +99,7 @@ function solution_cost(nb_jobs::Int64,
     for γ in 1:nb_jobs
         τ = last_task_of_jobs[γ];
         completed_job_time = start_time_of_task[τ] + duration_task[τ];
-        @assert completed_job_time == jobs_completion_time[γ];
+        # @assert completed_job_time == jobs_completion_time[γ];
         if completed_job_time > jobs_due_date[γ]
             u = 1
         else
@@ -115,15 +115,16 @@ end
 
 
 
-function distribution()
-    duration_task, compat_machine_operator_per_task,
-            α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
-            jobs_task_sequences,
-            jobs_weights,
-            jobs_release_date,
-            jobs_due_date,
-            last_task_of_jobs,
-            job_of_task = importation();
+function distribution(duration_task::Vector{Int64},
+    compat_machine_operator_per_task::Vector{Int64},
+    α::Int, β::Int, nb_machines::Int, nb_tasks::Int, nb_jobs::Int, nb_operators::Int,
+    jobs_task_sequences::Dict{Int64, Queue{Int64}},
+    jobs_weights::Vector{Int64},
+    jobs_release_date::Vector{Int64},
+    jobs_due_date::Vector{Int64},
+    last_task_of_jobs::Vector{Int64},
+    job_of_task::Vector{Int64})
+
 
     jobs_completion_time   = zeros(Int64, nb_jobs)
     todo_tasks             = Set{Int64}()
@@ -238,10 +239,45 @@ function distribution()
     
 
     sol_cost = solution_cost(nb_jobs, jobs_weights, start_time_of_task, duration_task, jobs_due_date, jobs_completion_time, last_task_of_jobs, α, β);
-    return sol_cost, start_time_of_task, busy_resources, jobs_release_date
+    return sol_cost, start_time_of_task, busy_resources, jobs_release_date, compat_machine_operator_per_task
 end
 
-@time distribution()
+
+
+duration_task,
+compat_machine_operator_per_task,
+α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
+jobs_task_sequences,
+jobs_weights,
+jobs_release_date,
+jobs_due_date,
+last_task_of_jobs,
+job_of_task = import_init();
 
 
 
+@time sol_cost, start_time_of_task, busy_resources, jobs_release_date, compat_machine_operator_per_task = distribution(duration_task,
+compat_machine_operator_per_task,
+α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
+jobs_task_sequences,
+jobs_weights,
+jobs_release_date,
+jobs_due_date,
+last_task_of_jobs,
+job_of_task);
+
+
+# survey les collisions de couples opérateurs_machines et faire un histogramme pour ensuite optimiser le code
+
+intersection = Float64[];
+for i in 1:nb_tasks
+    for j in i+1:nb_tasks
+        push!(intersection, norm(compat_machine_operator_per_task[i,:,:] .&&  compat_machine_operator_per_task[j,:,:], 1));
+    end
+end
+
+
+using Plots;
+histogram(intersection)
+# on constate que dans une immense majorité de cas, les tâches n'ont quasi aucun couple possible opérateur-machine en commun.
+# Ceci veut dire que "souvent" on n'aura pas à se préoccuper de telles intersections pour assigner les tâches avec les ressources disponibles et donc qu'on peut simplement essayer de parcourir le produit cartésien des couples possibles à chaque tâche à assigner lors de l'étape de temps en supprimant les solutions qui collisionnent.
