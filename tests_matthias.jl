@@ -107,16 +107,18 @@ end
 t = 1; # time
 # while length(done) >= nb_jobs
 
-
+while (length(done_tasks) < nb_tasks) & (t < 100)
+    println("=== Time $t ===")
     for τ in running_tasks # mettre à jour les statuts des tâches déjà démarrées: ont-elles terminé ?
-        if start_time_of_task[τ] - duration_task[τ] + 1 >= t
-            delete(running_tasks, τ);
+        if t - start_time_of_task[τ] >= duration_task[τ] + 1
+            delete!(running_tasks, τ);
             push!(done_tasks,    τ);
 
             running_jobs[job_of_task[τ]] = false;
 
             busy_machines[machine_choice_of_task[τ]]   = false;
             busy_operators[operator_choice_of_task[τ]] = false;
+            println("Finishing task $τ");
         end
     end
     
@@ -125,7 +127,7 @@ t = 1; # time
         if ~running_jobs[γ] && ~isempty(jobs_task_sequences[γ]) # dernière tâche du job finie ou bien job pas encore commencé et il reste des tâches
             τ = dequeue!(jobs_task_sequences[γ]);
             push!(todo_tasks, τ);  # on passe à la tâche suivante
-
+            println("Adding task $τ to the queue");
         end
     end
 
@@ -134,22 +136,22 @@ t = 1; # time
     for τ in todo_tasks
         γ  = job_of_task[τ];
         Δt = jobs_due_date[γ] - t;
-        λ  = importance_on_time(Δt, γ, β, jobs_task_sequences, jobs_weights);
-        score_of_task[τ] = λ;
+        score_of_task[τ] = importance_on_time(Δt, γ, β, jobs_task_sequences, jobs_weights);
     end
         
         
     todo_tasks_vec = collect(todo_tasks);
     priority = reverse(sortperm(score_of_task[todo_tasks_vec])); # trié dans l'ordre croissant sans le rev
     # mxval, mxindx = findmax(collect(score_of_task));
-    tasks_to_assign = todo_tasks_vec[priority]
+    tasks_to_assign = todo_tasks_vec[priority];
+    println("Tasks to assign: $tasks_to_assign");
 
     for τ in tasks_to_assign # for i=1:size(tasks_to_assign)[1]
         # en itérant sur les tâches les plus importantes par ordre décroissantà mesure que l'on parcourt les index (numéro i, i ∈ 1,...)
 
         busy_resources       .= Matrix{Bool}(ones(Bool, nb_machines)*busy_operators' .| busy_machines*ones(Bool, nb_operators)')[:,:]; # calcul opérateur occupé OU LOGIQUE machine occupée
         compatible_resources = compat_machine_operator_per_task[τ,:,:];
-        possible_resources  = compatible_resources .& .~busy_resources; # couple (machine, opérateur) dispo SSI c'est compatible et disponible
+        possible_resources  = compatible_resources .& .~busy_resources; # matrice (machine, opérateur) ressource dispo si et seulement si elle est compatible (avec la tâche) et disponible
 
         
         if any(possible_resources)
@@ -164,13 +166,16 @@ t = 1; # time
             machine_choice_of_task[τ]  = choice_machine;
             operator_choice_of_task[τ] = choice_operator;
             start_time_of_task[τ]      = t;
+            delete!(todo_tasks, τ);
 
-            println("Task $τ");
+            println("= Commencing task $τ of Job $(job_of_task[τ])");
             push!(running_tasks, τ);
             running_jobs[job_of_task[τ]] = true;
 
             busy_operators[choice_operator]  = true;
             busy_machines[choice_machine]    = true;
-            println("operator $(choice_operator) starting machine $(choice_machine)")
+            println("operator $(choice_operator) on machine $(choice_machine)");
         end
     end 
+    t += 1;
+end
