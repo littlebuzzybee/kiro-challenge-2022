@@ -2,6 +2,7 @@ using JSON;
 using LinearAlgebra;
 using DataStructures;
 using DataFrames;
+using Iterators;
 
 function import_init()
     instance = JSON.parsefile("C:/Users/matth/Documents/GitHub/kiro-challenge-2022/instances/huge.json")
@@ -113,10 +114,41 @@ end
 
 
 
+function local_decision(duration_task::Vector{Int64},
+    C::Array{Bool, 3}, # alias de compat_machine_operator_per_task
+    α::Int, β::Int, nb_machines::Int, nb_tasks::Int, nb_jobs::Int, nb_operators::Int,
+    jobs_task_sequences::Dict{Int64, Queue{Int64}},
+    jobs_weights::Vector{Int64},
+    jobs_release_date::Vector{Int64},
+    jobs_due_date::Vector{Int64},
+    last_task_of_jobs::Vector{Int64},
+    job_of_task::Vector{Int64},
+    todo_tasks::Set{Int64}, ## paramètres spécifiques au flow dans la décision (à t fixé)
+    Dm::Vector{Bool}, # alias de .~ busy_machines
+    Do::Vector{Bool}) # alias de .~ busy_operators
 
+
+    adressable_tasks = Set{Int64}();
+    for τ in  todo_tasks
+        if Dm' * C[τ,:,:] * Do ≥ 1
+            push!(adressable_tasks, τ);
+        end
+    end
+
+    nb_adr_tasks         = length(adressable_tasks);
+    adressable_tasks_vec = Vector(adressable_tasks);
+
+    collision_machines   = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
+    collision_operators  = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
+
+    for s in Iterators.product(1:nb_adr_tasks, 1:nb_adr_tasks)
+        collisions_machines[s[1],s[2]]  = any(Dm' * (C[s[1],:,:] .| C[s[2],:,:]));
+        collisions_operators[s[1],s[2]] = any((C[s[1],:,:] .| C[s[2],:,:]) * Do);
+    end
+end
 
 function distribution(duration_task::Vector{Int64},
-    compat_machine_operator_per_task::Vector{Int64},
+    compat_machine_operator_per_task::Array{Bool, 3},
     α::Int, β::Int, nb_machines::Int, nb_tasks::Int, nb_jobs::Int, nb_operators::Int,
     jobs_task_sequences::Dict{Int64, Queue{Int64}},
     jobs_weights::Vector{Int64},
@@ -281,3 +313,23 @@ using Plots;
 histogram(intersection)
 # on constate que dans une immense majorité de cas, les tâches n'ont quasi aucun couple possible opérateur-machine en commun.
 # Ceci veut dire que "souvent" on n'aura pas à se préoccuper de telles intersections pour assigner les tâches avec les ressources disponibles et donc qu'on peut simplement essayer de parcourir le produit cartésien des couples possibles à chaque tâche à assigner lors de l'étape de temps en supprimant les solutions qui collisionnent.
+
+
+
+
+using CUDA;
+
+function inplace_kernel!(vec::CuDeviceVector{ComplexF32}, α::ComplexF32, ϵ::Float32, maxiter::Int32, res::CuDeviceVector{Float16})
+    i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    if i <= length(vec) # verify if the index i actually corresponds to a index of the vectors
+        ind = Int32(0);
+        iterexp = 3.f0*vec[i];
+        while (CUDA.abs(iterexp) > ϵ && ind < maxiter) # dummy algorithm to illustrate kernel writing
+            iterexp *= α;
+            vec[i] += CUDA.exp(-CUDA.abs(2.0f0*vec[i]));
+            ind += 1;
+        end
+        res[i] = convert(Float16, CUDA.abs(iterexp));
+    end
+    return nothing;
+end
