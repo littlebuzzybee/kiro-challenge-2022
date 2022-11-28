@@ -177,18 +177,21 @@ function local_decision(duration_task::Vector{Int64},
     enqueue!(q, [current_state])
 
     while ~isempty(q)
-        instance   = dequeue!(q);
-        Dm         = Vector{Bool}(digits(instance.Dm,       base=2, pad=nb_adr_tasks)); # Vector{Int64} transformé en Vector{Bool}
-        Do         = Vector{Bool}(digits(instance.Dm,       base=2, pad=nb_adr_tasks));
-        adressable = Vector{Bool}(digits(instance.assigned, base=2, pad=nb_adr_tasks));
-        score = instance.score;
+        instance       = dequeue!(q);
+        # Vector{Int64} transformés en Vector{Bool}
+        disp_m         = Vector{Bool}(digits(instance.Dm,       base=2, pad=nb_machines));
+        disp_o         = Vector{Bool}(digits(instance.Dm,       base=2, pad=nb_operators));
+        adressable     = Vector{Bool}(digits(instance.assigned, base=2, pad=nb_adr_tasks));
+        score          = instance.score;
         
         for τ=1:nb_adr_tasks # pour toute tâche encore adressable: prendre les bits positifs dans l'ordre du plus 
-            if @views dot(Dm, C_sparse[τ], Do) ≥ 1 # si adressable avec les ressources restantes
-                for 
+            if @views dot(disp_m, C_sparse[τ], disp_o) ≥ 1 # si adressable avec au moins une des ressources restantes
+                c_poss = @views disp_m * ones(Bool, nb_operators)' .& C_sparse[τ] .& ones(Bool, nb_machines) * disp_o';
                 new_adressable = adressable - encoding_kernel[τ];
-                # parcours sur la tranche de compatibilité là où sont les 1
-                av_mach, av_oper, ~ = findnz(C_sparse[τ]);
+                for (m,o,~) in zip(findnz(c_poss)) # parcours sur la tranche de compatibilité là où sont les 1
+                    
+                    
+                end 
             end
         end
     end
