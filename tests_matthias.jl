@@ -1,11 +1,13 @@
 using JSON;
 using LinearAlgebra;
 using DataStructures;
-using DataFrames;
-using Iterators;
+# using DataFrames;
 
-function import_init()
-    instance = JSON.parsefile("C:/Users/matth/Documents/GitHub/kiro-challenge-2022/instances/huge.json")
+
+
+
+function import_init(file::String)
+    instance = JSON.parsefile(file)
 
     parameters = instance["parameters"]
     tasks      = instance["tasks"]
@@ -112,12 +114,33 @@ function solution_cost(nb_jobs::Int64,
     return S
 end
 
+using AutoHashEquals;
+@auto_hash_equals struct State
+    todo::Int64
+    score::Float16
+    adressable::Int64
+    Dm::Int64 # n'encode pas l'application machine   -> tâche
+    Do::Int64 # n'encode pas l'application opérateur -> tâche
+end
+# Idée pendant le parcours de l'arbre: pour éviter une explosion en complexité trop problématique, on ne mémorise que les tâches adressées, opérateurs et machines assignés indépendemment de tout mappage entre les tâches et ces derniers. C'est possible car une tâche adressée n'est plus à traiter/décider, et les machines et les opérateurs n'ont pas le don d'ubiquité. Donc pour aller plus loin en profondeur, seules ces informations sont suffisantes pour créer les nœuds.
 
+# Pour créer les assignations des machines et des opérateurs à leurs tâches une fois ces ensembles (machines, opérateurs, tâches) détérminés [sous réserve qu'ils soient entièrement compatibles], il faudra créer un petit solveur en aval une fois l'exploration des possibles effectuée.
+
+# Pour tout état, on pourra ainsi définir un ensemble d'assignations (fonctions machine -> tâche et opérateur -> tâche) respectant la situation. Et choisir celle qui favorise l'étape suivante / ou laisse le plus de choix/flexibilité à l'étape suivante (pour itérer le processus). Quand on parle de flexibilité ici, on parle d'éléments choisis d'opérateurs et machines pour un nombre fixé à l'avance respectivement, pas de leur quantité puisqu'à situation fixée, toute tâche adressée aura besoin exactement d'une machine unique et d'un opérateur unique.
+
+using Distributions; # pour générer des exemples pour les tests
+using SparseArrays;
+
+# deux solutions:
+dist = Bernoulli(.1);
+C = rand(dist, 10, 10);
+C = sprand(Bool, 10, 10, .1);
 
 function local_decision(duration_task::Vector{Int64},
     C::Array{Bool, 3}, # alias de compat_machine_operator_per_task
     α::Int, β::Int, nb_machines::Int, nb_tasks::Int, nb_jobs::Int, nb_operators::Int,
-    jobs_task_sequences::Dict{Int64, Queue{Int64}},
+    jobs_task_sequences::Dict{Int64, Queue{Int64}}, # à ce stade, n'ont pas été dépilées !
+    # ajouter un dict de vecteurs pour avoir l'accès rapide aux tâches  qui arrivent ensuite
     jobs_weights::Vector{Int64},
     jobs_release_date::Vector{Int64},
     jobs_due_date::Vector{Int64},
@@ -127,10 +150,11 @@ function local_decision(duration_task::Vector{Int64},
     Dm::Vector{Bool}, # alias de .~ busy_machines
     Do::Vector{Bool}) # alias de .~ busy_operators
 
-
+    C_sparse = Dict{Int64, SparseMatrixCSC{Bool, Int64}};
     adressable_tasks = Set{Int64}();
     for τ in  todo_tasks
-        if Dm' * C[τ,:,:] * Do ≥ 1
+        C_sparse[τ] = sparse(view(C,τ,:,:));
+        if @views dot(Dm, C_sparse[τ], Do) ≥ 1
             push!(adressable_tasks, τ);
         end
     end
@@ -142,10 +166,39 @@ function local_decision(duration_task::Vector{Int64},
     collision_operators  = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
 
     for s in Iterators.product(1:nb_adr_tasks, 1:nb_adr_tasks)
-        collisions_machines[s[1],s[2]]  = any(Dm' * (C[s[1],:,:] .| C[s[2],:,:]));
-        collisions_operators[s[1],s[2]] = any((C[s[1],:,:] .| C[s[2],:,:]) * Do);
+        collisions_machines[s[1],s[2]]  = @views any(Dm' * (C[s[1],:,:] .| C[s[2],:,:]));
+        collisions_operators[s[1],s[2]] = @views any((C[s[1],:,:] .| C[s[2],:,:]) * Do);
     end
+
+    encoding_kernel = 2 .^ (0:nb_adr_tasks-1);
+
+    q = Queue{State}(); # vérifier au moment d'insérer ou remplacer par un ensemble éventuellement (pas besoin de multiplicité dans la file)
+
+    enqueue!(q, [current_state])
+
+    while ~isempty(q)
+        instance   = dequeue!(q);
+        Dm         = Vector{Bool}(digits(instance.Dm,       base=2, pad=nb_adr_tasks)); # Vector{Int64} transformé en Vector{Bool}
+        Do         = Vector{Bool}(digits(instance.Dm,       base=2, pad=nb_adr_tasks));
+        adressable = Vector{Bool}(digits(instance.assigned, base=2, pad=nb_adr_tasks));
+        score = instance.score;
+        
+        for τ=1:nb_adr_tasks # pour toute tâche encore adressable: prendre les bits positifs dans l'ordre du plus 
+            if @views dot(Dm, C_sparse[τ], Do) ≥ 1 # si adressable avec les ressources restantes
+                for 
+                new_adressable = adressable - encoding_kernel[τ];
+                # parcours sur la tranche de compatibilité là où sont les 1
+                av_mach, av_oper, ~ = findnz(C_sparse[τ]);
+            end
+        end
+    end
+
+
+    
 end
+
+
+
 
 function distribution(duration_task::Vector{Int64},
     compat_machine_operator_per_task::Array{Bool, 3},
@@ -284,7 +337,7 @@ jobs_weights,
 jobs_release_date,
 jobs_due_date,
 last_task_of_jobs,
-job_of_task = import_init();
+job_of_task = import_init("C:/Users/matth/Documents/GitHub/kiro-challenge-2022/instances/tiny.json");
 
 
 
