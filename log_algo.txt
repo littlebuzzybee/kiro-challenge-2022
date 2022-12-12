@@ -1,21 +1,6 @@
 === Time 1 ===
-Adding task 1 to the queue
-Adding task 2 to the queue
-Adding task 3 to the queue
-Adding task 4 to the queue
-Adding task 5 to the queue
-Tasks to assign: [4, 2, 1, 3, 5]
+Tasks to assign: Int64[]
 
-= Commencing task 4 of Job 4
-operator 8 on machine 7
-= Commencing task 2 of Job 2
-operator 3 on machine 6
-= Commencing task 1 of Job 1
-operator 5 on machine 1
-= Commencing task 3 of Job 3
-operator 1 on machine 4
-= Commencing task 5 of Job 5
-operator 2 on machine 2
 
 
 === Time 2 ===
@@ -24,145 +9,68 @@ Tasks to assign: Int64[]
 
 
 === Time 3 ===
-Finishing task 5
-Completing job 5
-Finishing task 2
-Finishing task 3
-Finishing task 1
-Adding task 9 to the queue
-Adding task 8 to the queue
-Adding task 7 to the queue
-Tasks to assign: [8, 9, 7]
+Tasks to assign: Int64[]
 
-= Commencing task 8 of Job 2
-operator 2 on machine 4
-= Commencing task 9 of Job 1
-operator 1 on machine 6
-= Commencing task 7 of Job 3
-operator 7 on machine 5
 
 
 === Time 4 ===
-Finishing task 4
-Adding task 6 to the queue
-Tasks to assign: [6]
+Tasks to assign: Int64[]
 
-= Commencing task 6 of Job 4
-operator 8 on machine 3
 
 
 === Time 5 ===
-Finishing task 7
-Finishing task 9
-Finishing task 8
-Adding task 10 to the queue
-Adding task 14 to the queue
-Adding task 19 to the queue
-Tasks to assign: [14, 10, 19]
+Tasks to assign: Int64[]
 
-= Commencing task 14 of Job 2
-operator 2 on machine 8
-= Postponed task 10 of Job 1 for lack of resource
-= Commencing task 19 of Job 3
-operator 4 on machine 1
 
 
 === Time 6 ===
-Adding task 15 to the queue
-Tasks to assign: [10, 15]
+Tasks to assign: Int64[]
 
-= Postponed task 10 of Job 1 for lack of resource
-= Commencing task 15 of Job 1
-operator 7 on machine 7
 
 
 === Time 7 ===
-Finishing task 6
-Finishing task 19
-Completing job 3
-Adding task 11 to the queue
-Tasks to assign: [11, 10]
+Tasks to assign: Int64[]
 
-= Commencing task 11 of Job 4
-operator 8 on machine 3
-= Postponed task 10 of Job 1 for lack of resource
 
 
 === Time 8 ===
-Finishing task 14
-Adding task 18 to the queue
-Tasks to assign: [10, 18]
+Tasks to assign: Int64[]
 
-= Commencing task 10 of Job 1
-operator 3 on machine 8
-= Commencing task 18 of Job 2
-operator 5 on machine 1
 
 
 === Time 9 ===
-Finishing task 15
-Adding task 16 to the queue
-Tasks to assign: [16]
+Tasks to assign: Int64[]
 
-= Commencing task 16 of Job 1
-operator 7 on machine 5
 
 
 === Time 10 ===
-Finishing task 11
-Finishing task 10
-Finishing task 18
-Adding task 20 to the queue
-Adding task 12 to the queue
-Tasks to assign: [20, 12]
+Tasks to assign: Int64[]
 
-= Commencing task 20 of Job 2
-operator 6 on machine 1
-= Commencing task 12 of Job 4
-operator 3 on machine 3
 
 
 === Time 11 ===
-Finishing task 16
-Completing job 1
 Tasks to assign: Int64[]
 
 
 
 === Time 12 ===
-Finishing task 12
-Adding task 13 to the queue
-Tasks to assign: [13]
+Tasks to assign: Int64[]
 
-= Commencing task 13 of Job 4
-operator 7 on machine 3
 
 
 === Time 13 ===
-Finishing task 20
-Adding task 22 to the queue
-Tasks to assign: [22]
+Tasks to assign: Int64[]
 
-= Commencing task 22 of Job 2
-operator 3 on machine 8
 
 
 === Time 14 ===
-Finishing task 13
-Adding task 17 to the queue
-Tasks to assign: [17]
+Tasks to assign: Int64[]
 
-= Commencing task 17 of Job 4
-operator 5 on machine 2
 
 
 === Time 15 ===
-Finishing task 22
-Adding task 24 to the queue
-Tasks to assign: [24]
+Tasks to assign: Int64[]
 
-= Commencing task 24 of Job 2
-operator 4 on machine 4
 
 
 === Time 16 ===
@@ -171,14 +79,8 @@ Tasks to assign: Int64[]
 
 
 === Time 17 ===
-Finishing task 24
-Completing job 2
-Finishing task 17
-Adding task 21 to the queue
-Tasks to assign: [21]
+Tasks to assign: Int64[]
 
-= Commencing task 21 of Job 4
-operator 8 on machine 3
 
 
 === Time 18 ===
@@ -192,12 +94,8 @@ Tasks to assign: Int64[]
 
 
 === Time 20 ===
-Finishing task 21
-Adding task 23 to the queue
-Tasks to assign: [23]
+Tasks to assign: Int64[]
 
-= Commencing task 23 of Job 4
-operator 7 on machine 8
 
 
 === Time 21 ===
@@ -206,12 +104,8 @@ Tasks to assign: Int64[]
 
 
 === Time 22 ===
-Finishing task 23
-Adding task 25 to the queue
-Tasks to assign: [25]
+Tasks to assign: Int64[]
 
-= Commencing task 25 of Job 4
-operator 8 on machine 5
 
 
 === Time 23 ===
@@ -220,8 +114,381 @@ Tasks to assign: Int64[]
 
 
 === Time 24 ===
-Finishing task 25
-Completing job 4
+Tasks to assign: Int64[]
+
+
+
+=== Time 25 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 26 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 27 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 28 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 29 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 30 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 31 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 32 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 33 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 34 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 35 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 36 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 37 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 38 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 39 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 40 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 41 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 42 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 43 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 44 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 45 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 46 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 47 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 48 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 49 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 50 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 51 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 52 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 53 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 54 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 55 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 56 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 57 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 58 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 59 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 60 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 61 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 62 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 63 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 64 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 65 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 66 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 67 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 68 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 69 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 70 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 71 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 72 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 73 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 74 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 75 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 76 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 77 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 78 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 79 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 80 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 81 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 82 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 83 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 84 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 85 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 86 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 87 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 88 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 89 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 90 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 91 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 92 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 93 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 94 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 95 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 96 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 97 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 98 ===
+Tasks to assign: Int64[]
+
+
+
+=== Time 99 ===
 Tasks to assign: Int64[]
 
 
