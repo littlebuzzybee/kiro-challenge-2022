@@ -141,6 +141,10 @@ using AutoHashEquals;
 end
 
 
+# test ssh
+
+
+
 function local_decision(duration_task::Vector{Int64},
     compat_m_o           ::Array{Bool, 3}, # alias pour compat_machine_operator_per_task
     α                    ::Number,
