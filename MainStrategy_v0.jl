@@ -1,4 +1,4 @@
-include("ImportAndMetrics.jl")
+include("ImportAndMetrics.jl");
 
 
 
@@ -6,39 +6,45 @@ include("ImportAndMetrics.jl")
 
 
 # fonction principale du programme qui calcule la stratégie à adopter
-function main_strategy(duration_task::Vector{Int64},
-    compat_machine_operator_per_task::Array{Bool, 3},
-    α::Int, β::Int, nb_machines::Int, nb_tasks::Int, nb_jobs::Int, nb_operators::Int,
-    jobs_task_sequences::Dict{Int64, Queue{Int64}},
-    jobs_weights::Vector{Int64},
-    jobs_release_date::Vector{Int64},
-    jobs_due_date::Vector{Int64},
-    last_task_of_jobs::Vector{Int64},
-    job_of_task::Vector{Int64})
+function main_strategy(
+        compat_machine_operator_per_task::Array{Bool, 3},
+        α                    ::Int,
+        β                    ::Int,
+        duration_task        ::Vector{TimeUnit},
+        nb_machines          ::MachineId,
+        nb_tasks             ::TaskId,
+        nb_jobs              ::JobId,
+        nb_operators         ::OperatorId,
+        jobs_task_sequences  ::Dict{JobId, Queue{TaskId}},
+        jobs_weights         ::Vector{Weight},
+        jobs_release_date    ::Vector{TimeUnit},
+        jobs_due_date        ::Vector{TimeUnit},
+        last_task_of_jobs    ::Vector{TaskId},
+        job_of_task          ::Vector{JobId}
+    )
 
+    jobs_completion_time    = zeros(TimeUnit, nb_jobs)
+    nb_tasks_per_job        = zeros(TaskId, nb_jobs)
+    todo_tasks              = Set{Int64}()
 
-    jobs_completion_time   = zeros(Int64, nb_jobs)
-    todo_tasks             = Set{Int64}()
-    nb_tasks_per_job       = zeros(Int64, nb_jobs)
+    running_tasks           = Set{Int64}()
+    done_tasks              = Set{Int64}()
+    done_jobs               = Set{Int64}()
 
-    running_tasks          = Set{Int64}()
-    done_tasks             = Set{Int64}()
-    done_jobs              = Set{Int64}()
+    busy_machines           = zeros(Bool, nb_machines)
+    busy_operators          = zeros(Bool, nb_operators)
+    running_jobs            = zeros(Bool, nb_jobs)
 
-    busy_machines          = zeros(Bool, nb_machines)
-    busy_operators         = zeros(Bool, nb_operators)
-    running_jobs           = zeros(Bool, nb_jobs)
-
-    busy_resources         = zeros(Bool, nb_machines, nb_operators)
+    busy_resources          = zeros(Bool, nb_machines, nb_operators)
     # busy_resources encodera en un seul tableau les couples machine_opérateur disponibles à chaque étape d'assignation des tâches
 
     score_of_task           = zeros(Float64, nb_tasks)
     # ce tableau est réévalué à chaque étape de temps t pour les tâches τ envisagées
 
-    start_time_of_task      = zeros(Int64, nb_tasks)
-    complete_time_of_task   = zeros(Int64, nb_tasks)
-    operator_choice_of_task = zeros(Int64, nb_tasks)
-    machine_choice_of_task  = zeros(Int64, nb_tasks)
+    start_time_of_task      = zeros(TimeUnit,   nb_tasks)
+    complete_time_of_task   = zeros(TimeUnit,   nb_tasks)
+    operator_choice_of_task = zeros(OperatorId, nb_tasks)
+    machine_choice_of_task  = zeros(MachineId,  nb_tasks)
 
 
     t = 1; # Initialisation du temps
@@ -136,7 +142,11 @@ end
 
 duration_task,
 compat_machine_operator_per_task,
-α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
+α, β,
+nb_machines,
+nb_tasks,
+nb_jobs,
+nb_operators,
 jobs_task_sequences,
 jobs_weights,
 jobs_release_date,
@@ -146,15 +156,18 @@ job_of_task = import_init(path*"instances/tiny.json");
 
 
 
-@time sol_cost, start_time_of_task, busy_resources, jobs_release_date, compat_machine_operator_per_task = main_strategy(duration_task,
-compat_machine_operator_per_task,
-α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
-jobs_task_sequences,
-jobs_weights,
-jobs_release_date,
-jobs_due_date,
-last_task_of_jobs,
-job_of_task);
+@time sol_cost, start_time_of_task, busy_resources, jobs_release_date, compat_machine_operator_per_task = main_strategy(compat_machine_operator_per_task,
+                α, β, duration_task,
+                nb_machines,
+                nb_tasks,
+                nb_jobs,
+                nb_operators,
+                jobs_task_sequences,
+                jobs_weights,
+                jobs_release_date,
+                jobs_due_date,
+                last_task_of_jobs,
+                job_of_task);
 
 
 

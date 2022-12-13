@@ -1,4 +1,4 @@
-# Idée pendant le parcours de l'arbre: pour éviter une explosion en complexité trop problématique, on ne mémorise que les tâches adressées, opérateurs et machines assignés indépendemment de tout mappage entre les tâches et ces derniers. C'est possible car une tâche adressée n'est plus à traiter/décider, et les machines et les opérateurs n'ont pas le don d'ubiquité. Donc pour aller plus loin en profondeur, seules ces informations sont suffisantes pour créer les nœuds.
+# Idée pendant le parcours de l'arbre: pour éviter une explosion en complexité trop problématique, on ne mémorise que les tâches adressées, opérateurs et machines assignés indépendemment de tout mappage entre les tâches et ces derniers. C'est possible car une tâche adressée n'est plus à traiter/décider, et les machines et les opérateurs n'ont pas le don d'ubiquité. Donc pour aller plus loin en profondeur, seules ces informations sont suffisantes pour créer les nœuds. On pourra ensuite se donner un seuil (par exemple; À CHAQUE ÉTAPE DE TEMPS: ne propager en utilisant seulement les noeuds correspondant aux 20% des assignments couvrant le + de tâches // ou bien avec un nombre fixe max de noeuds pour majorer l'explosion combinatoire mémoire), et le maximum si pas assez de ressources) de nouvelles tâches à effectuer à chaque étape de temps
 
 # Pour créer les assignations des machines et des opérateurs à leurs tâches une fois ces ensembles (machines, opérateurs, tâches) détérminés [sous réserve qu'ils soient entièrement compatibles], il faudra créer un petit solveur en aval une fois l'exploration des possibles effectuée.
 
@@ -15,15 +15,24 @@ C = sprand(Bool, 10, 10, .1);
 
 using AutoHashEquals;
 @auto_hash_equals struct State
-    nb_todo    ::Int64         # le nombre de tâches à adresser
-    todo       ::Vector{Bool}   # les tâches à adresser <" vecteur de booléens ? Set ?
-    score      ::Number   # score de la configuration (Int ou Float indéfini)
-    av_m       ::UInt128  # n'encode pas l'application m2t:  machine ↦ tâche
-    av_o       ::UInt128  # n'encode pas l'application m2o:opérateur ↦ tâche
-    timestep   ::Int64    # temps
+    nb_todo    ::Int64           # le nombre de tâches à adresser
+    todo       ::Set{Int64}      # les tâches à adresser: Set plutôt que Vector{Bool} car ensemble réduit
+    score      ::Number          # score de la configuration (Int ou Float indéfini)
+    av_m       ::UInt128         # n'encode pas l'application m2t:  machine ↦ tâche pris seul (nécessite la branche complète)
+    av_o       ::UInt128         # n'encode pas l'application m2o:opérateur ↦ tâche
+    timestep   ::Int64           # temps (profondeur du nœud)
 end
 
 
+function evaluate_state(
+        nb_todo::Int64,
+#=         jobs_weights::Vector{Int64},
+        duration_task::Vector{Int64},
+        jobs_due_date::Vector{Int64},
+        α::Int64, β::Int64 =#
+    )::Number # à spécifier
+    return nb_todo; # à modifier pour tester différentes fonctions d'évaluation des nœuds
+end
 
 
 
@@ -37,7 +46,7 @@ function local_decision(duration_task::Vector{Int64},
     nb_tasks             ::Int,
     nb_jobs              ::Int,
     nb_operators         ::Int,
-    jobs_task_sequences  ::Dict{Int64, Queue{Int64}}, # à ce stade, n'ont pas été dépilées !
+    jobs_task_sequences  ::Dict{Int64, Queue{Int64}}, # sera modifiée en place si profondeur temporelle > 1
     # ajouter un dict de vecteurs pour avoir l'accès rapide aux tâches  qui arrivent ensuite
     jobs_weights         ::Vector{Int64},
     jobs_release_date    ::Vector{Int64},
@@ -46,9 +55,12 @@ function local_decision(duration_task::Vector{Int64},
     job_of_task          ::Vector{Int64},
     todo_tasks           ::Set{Int64},    # paramètres spécifiques au flow dans la décision (à t fixé)
     av_m                 ::UInt128,       # alias de .~ busy_machines  (machines disponibles)
-    av_o                 ::UInt128)       # alias de .~ busy_operators (opérateurs disponibles)
+    av_o                 ::UInt128,
+    timestep             ::Int64)       # alias de .~ busy_operators (opérateurs disponibles)
+    
 
-    # SPARSIFIER LES COMPATIBILITÉS POUR CHAQUE TÂCHE
+    # SPARSIFIER LES COMPATIBILITÉS POUR CHAQUE TÂCHE ET CONSTRUIRE UN ENSEMBLE (type Set) DE TÂCHES ADRESSABLES
+
     compat_sparse = Dict{Int64, SparseMatrixCSC{Bool, Int64}}; # créer un dictionnaire ayant pour clé les tâches, et en valeurs les tranches sparsifiées de leur compatibilité (pour itérer dessus ensuite)
     adressable_tasks = Set{Int64}();
     for τ in  todo_tasks                  # remplir le dictionnaire en itérant sur les tâches
@@ -62,7 +74,8 @@ function local_decision(duration_task::Vector{Int64},
     adressable_tasks_vec = Vector(adressable_tasks);
 
 
-    # CRÉER LES INDICATEURS DE COLLISIONS
+    # CRÉER LES INDICATEURS DE COLLISIONS (Matrices de booléens)
+
     collision_machines   = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
     # collision_machines[i,j] = true ssi les tâches i et j partagent au moins une machine disponible étant capable de les réaliser
     collision_operators  = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
@@ -77,15 +90,18 @@ function local_decision(duration_task::Vector{Int64},
     # CRÉER LE SETUP POUR LE PARCOURS DE L'ARBRE
     encoding_kernel = 2 .^ (0:nb_adr_tasks-1);
 
-    q = Queue{State}(); # vérifier au moment d'insérer ou remplacer par un ensemble éventuellement (pas besoin de multiplicité dans la file)
+    queue_states = Queue{State}(); # vérifier au moment d'insérer ou remplacer par un ensemble éventuellement (pas besoin de multiplicité dans la file)
 
-    current_state = State(nb_adr_tasks,0.0)
-    enqueue!(q, [current_state])
+    σ = evaluate_state(nb_adr_tasks); # évaluer le score du premier nœud
+    current_state = State(nb_adr_tasks, adressable_tasks, σ, av_m, av_o, timestep); # créer le premier nœud
+    enqueue!(queue_states, current_state);
 
     # PARCOURS
+
+    # thoughts pour la suite: quid du dictionnaire pour les noeuds traités
+    # cf idée de ne pas stocker les associations entre tâches, machines et opérateurs, comment alors évaluer le score d'un noeud ? prendre le min selon les associations ? mais ne change rien tant qu'on a pas passé l'étape suivante ! oblige à recalculer ensuite à cause de la fonction pas stockée ? et donc ajouter ça à la fonction d'évaluation ?
     while ~isempty(q)
-        instance       = dequeue!(q);
-        # Vector{Int64} transformés en Vector{Bool}
+        instance       = dequeue!(queue_states);
         av_m           = Vector{Bool}(digits(instance.av_m,       base=2, pad=nb_machines));
         av_o           = Vector{Bool}(digits(instance.av_m,       base=2, pad=nb_operators));
         adressable     = Vector{Bool}(digits(instance.adressable, base=2, pad=nb_adr_tasks));

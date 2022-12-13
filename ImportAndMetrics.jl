@@ -4,6 +4,16 @@ using DataStructures;
 # using DataFrames;
 
 
+MachineId  = UInt8;
+OperatorId = UInt8;
+TaskId     = UInt16;
+JobId      = UInt16;
+TimeUnit   = Int64;
+Weight     = Int64;
+
+# des Δt sont mesurés et peuvent être négatifs ! Penser aux opérations et aux comparaisons !
+
+
 
 function import_init(file::String)
     instance = JSON.parsefile(file)
@@ -16,41 +26,44 @@ function import_init(file::String)
     parameters_costs = parameters["costs"]
 
 
-
-    nb_machines, nb_tasks, nb_jobs, nb_operators = param_size["nb_machines"], param_size["nb_tasks"], param_size["nb_jobs"], param_size["nb_operators"]
+    # conversion pertinente ? Ou laisser les cardinaux en Int64 ?
+    nb_machines  = MachineId( param_size["nb_machines"]);
+    nb_tasks     = TaskId(    param_size["nb_tasks"]);
+    nb_jobs      = JobId(     param_size["nb_jobs"]);
+    nb_operators = OperatorId(param_size["nb_operators"]);
 
     interim, unit_penalty, tardiness = parameters_costs["interim"], parameters_costs["unit_penalty"], parameters_costs["tardiness"]
 
     α = parameters_costs["unit_penalty"]
     β = parameters_costs["tardiness"]
 
-    duration_task        = zeros(Int64, nb_tasks)
-    job_of_task          = zeros(Int64, nb_tasks)
-    jobs_task_sequences  = Dict{Int64, Queue{Int}}()
+    duration_task        = zeros(TimeUnit, nb_tasks);
+    job_of_task          = zeros(JobId, nb_tasks);
+    jobs_task_sequences  = Dict{JobId, Queue{TaskId}}();
 
     compat_machine_operator_per_task = zeros(Bool, (nb_tasks, nb_machines, nb_operators))
 
     for i=1:nb_tasks
-        task = tasks[i];
-        duration_task[i] = task["processing_time"];
-        possible_machines = task["machines"];
+        τ = tasks[i];
+        duration_task[i] = τ["processing_time"]; # durée de la tâche, temps de process
+        possible_machines = τ["machines"];
         for machine in possible_machines
             machine_index = machine["machine"];
-            possible_operators = Vector{Int64}(machine["operators"]);
+            possible_operators = Vector{OperatorId}(machine["operators"]);
             compat_machine_operator_per_task[Int64(i), machine_index, possible_operators] .= true;
         end
     end
 
-    jobs_weights         = zeros(Int64, nb_jobs)
-    jobs_release_date    = zeros(Int64, nb_jobs)
-    jobs_due_date        = zeros(Int64, nb_jobs)
-    last_task_of_jobs    = zeros(Int64, nb_jobs)
+    jobs_weights         = zeros(Weight,    nb_jobs);
+    jobs_release_date    = zeros(TimeUnit,  nb_jobs);
+    jobs_due_date        = zeros(TimeUnit,  nb_jobs);
+    last_task_of_jobs    = zeros(TaskId,    nb_jobs);
     
     
 
     for γ=1:nb_jobs 
-        jobs_task_sequences[γ] = Queue{Int64}();
-        for τ in Vector{Int64}(jobs[γ]["sequence"]) # remplir les queues de tâches pour tous les jobs
+        jobs_task_sequences[γ] = Queue{TaskId}();
+        for τ in Vector{TaskId}(jobs[γ]["sequence"]) # remplir les queues de tâches pour tous les jobs
             enqueue!(jobs_task_sequences[γ], τ);
             job_of_task[τ] = γ;
         end
@@ -75,8 +88,11 @@ end
 
 
 
-function importance(Δt::Int, γ::Int, α::Int, β::Int,
-    jobs_task_sequences::Dict{Int64, Queue{Int64}}, jobs_weights::Vector{Int64})
+function importance(
+    Δt::TimeUnit, γ::JobId, α::Int, β::Int,
+    jobs_task_sequences::Dict{JobId, Queue{TaskId}},
+    jobs_weights::Vector{Int64}
+    )
 
     # multiples à ajuster: hyperparamètre
     if Δt ≤ 0 # job pas en retard
@@ -89,14 +105,18 @@ function importance(Δt::Int, γ::Int, α::Int, β::Int,
 end
 
 
-function solution_cost(nb_jobs::Int64,
-        jobs_weights::Vector{Int64},
-        start_time_of_task::Vector{Int64},
-        duration_task::Vector{Int64},
-        jobs_due_date::Vector{Int64},
-        jobs_completion_time::Vector{Int64},
-        last_task_of_jobs::Vector{Int64},
-        α::Int64, β::Int64)
+function solution_cost(
+        nb_jobs              ::JobId,
+        jobs_weights         ::Vector{Weight},
+        start_time_of_task   ::Vector{TimeUnit},
+        duration_task        ::Vector{TimeUnit},
+        jobs_due_date        ::Vector{TimeUnit},
+        jobs_completion_time ::Vector{TimeUnit},
+        last_task_of_jobs    ::Vector{TaskId},
+        α                    ::Int64,
+        β                    ::Int64
+        )::Number
+
     S = 0;
     for γ in 1:nb_jobs
         τ = last_task_of_jobs[γ];
@@ -119,4 +139,4 @@ end
 windows_path = "C:/Users/matth/Documents/GitHub/kiro-challenge-2022/";
 linux_path   = "/home/matthias/Documents/GitHub/kiro-challenge-2022/";
 
-path = linux_path;
+path = linux_path; # à changer selon la plateforme si besoin
