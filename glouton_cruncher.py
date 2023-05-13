@@ -1,3 +1,5 @@
+"""Performs random search based on heuristics"""
+
 import numpy as np
 import json
 
