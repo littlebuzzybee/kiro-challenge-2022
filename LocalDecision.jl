@@ -4,6 +4,8 @@
 
 # Pour tout état, on pourra ainsi définir un ensemble d'assignations (fonctions machine -> tâche et opérateur -> tâche) respectant la situation. Et choisir celle qui favorise l'étape suivante / ou laisse le plus de choix/flexibilité à l'étape suivante (pour itérer le processus). Quand on parle de flexibilité ici, on parle d'éléments choisis d'opérateurs et machines pour un nombre fixé à l'avance respectivement, pas de leur quantité puisqu'à situation fixée, toute tâche adressée aura besoin exactement d'une machine unique et d'un opérateur unique.
 
+# Si on itère loin dans le futur, il faut créer alors une fonction d'évaluation de la situation (comme pour l'algorithme du minimax aux échecs, les coups de l'adversaire étant comparables à l'ensemble des tâches pouvant être ajoutées (l'information en plus qu'on ne maîtrise pas et qui nous est imposée) par le planning et l'arrivage des job releases)
+
 using Distributions; # pour générer des exemples pour les tests
 using SparseArrays;
 
@@ -55,13 +57,13 @@ function local_decision(duration_task::Vector{Int64},
     job_of_task          ::Vector{Int64},
     todo_tasks           ::Set{Int64},    # paramètres spécifiques au flow dans la décision (à t fixé)
     av_m                 ::UInt128,       # alias de .~ busy_machines  (machines disponibles)
-    av_o                 ::UInt128,
-    timestep             ::Int64)       # alias de .~ busy_operators (opérateurs disponibles)
+    av_o                 ::UInt128,       # alias de .~ busy_operators (opérateurs disponibles)
+    timestep             ::Int64)
     
 
     # SPARSIFIER LES COMPATIBILITÉS POUR CHAQUE TÂCHE ET CONSTRUIRE UN ENSEMBLE (type Set) DE TÂCHES ADRESSABLES
 
-    compat_sparse = Dict{Int64, SparseMatrixCSC{Bool, Int64}}; # créer un dictionnaire ayant pour clé les tâches, et en valeurs les tranches sparsifiées de leur compatibilité (pour itérer dessus ensuite)
+    compat_sparse = Dict{Int64, SparseMatrixCSC{Bool, Int64}}; # créer un dictionnaire ayant pour clé les tâches, et en valeurs les tranches sparsifiées de leur compatibilité (pour ITÉRER dessus ensuite)
     adressable_tasks = Set{Int64}();
     for τ in  todo_tasks                  # remplir le dictionnaire en itérant sur les tâches
         compat_sparse[τ] = sparse(view(compat_m_o, τ,:,:)); # ajouter la tranche
@@ -76,15 +78,16 @@ function local_decision(duration_task::Vector{Int64},
 
     # CRÉER LES INDICATEURS DE COLLISIONS (Matrices de booléens)
 
-    collision_machines   = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
-    # collision_machines[i,j] = true ssi les tâches i et j partagent au moins une machine disponible étant capable de les réaliser
-    collision_operators  = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
-    # collision_operators[i,j] = true ssi les tâches i et j partagent au moins un opérateur disponible étant capable de les réaliser
+    collisions_machines   = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
+    collisions_operators  = zeros(Bool, nb_adr_tasks, nb_adr_tasks);
 
     for (t1,t2) in Iterators.product(1:nb_adr_tasks, 1:nb_adr_tasks)
-        collisions_machines[t1,t2]  = @views any(av_m' * (compat_m_o[s[1],:,:] .| C[s[2],:,:]));
-        collisions_operators[t1,t2] = @views any((compat_m_o[s[1],:,:] .| compat_m_o[s[2],:,:]) * av_o);
+        collisions_machines[t1,t2]  = @views any(av_m' * (compat_m_o[t1,:,:] .| C[t2,:,:]));
+        collisions_operators[t1,t2] = @views any((compat_m_o[t1,:,:] .| compat_m_o[t2,:,:]) * av_o);
     end
+    # collision_machines[i,j] = true ssi les tâches i et j partagent au moins une machine disponible étant capable de les réaliser toutes les 2
+    # collision_operators[i,j] = true ssi les tâches i et j partagent au moins un opérateur disponible étant capable de les réaliser toutes les 2
+
 
 
     # CRÉER LE SETUP POUR LE PARCOURS DE L'ARBRE
@@ -92,14 +95,16 @@ function local_decision(duration_task::Vector{Int64},
 
     queue_states = Queue{State}(); # vérifier au moment d'insérer ou remplacer par un ensemble éventuellement (pas besoin de multiplicité dans la file)
 
+
     σ = evaluate_state(nb_adr_tasks); # évaluer le score du premier nœud
     current_state = State(nb_adr_tasks, adressable_tasks, σ, av_m, av_o, timestep); # créer le premier nœud
     enqueue!(queue_states, current_state);
 
     # PARCOURS
 
-    # thoughts pour la suite: quid du dictionnaire pour les noeuds traités
+    # réflexions pour la suite: quid du dictionnaire pour les noeuds traités
     # cf idée de ne pas stocker les associations entre tâches, machines et opérateurs, comment alors évaluer le score d'un noeud ? prendre le min selon les associations ? mais ne change rien tant qu'on a pas passé l'étape suivante ! oblige à recalculer ensuite à cause de la fonction pas stockée ? et donc ajouter ça à la fonction d'évaluation ?
+    # tout réside dans la fonction d'évaluation évoquée + haut ! Comment évaluer la fonction sur un Noeud intermédiaire sans recourir à de la récursivité ! Cela requière automatiquement que cette fonction puisse être évaluée progressivement sur une branche de l'arbre (par exemple en sommant des termes...)
     while ~isempty(q)
         instance       = dequeue!(queue_states);
         av_m           = Vector{Bool}(digits(instance.av_m,       base=2, pad=nb_machines));

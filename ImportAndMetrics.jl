@@ -3,7 +3,7 @@ using LinearAlgebra;
 using DataStructures;
 # using DataFrames;
 
-
+# Alias pour les types de données
 MachineId  = UInt8;
 OperatorId = UInt8;
 TaskId     = UInt16;
