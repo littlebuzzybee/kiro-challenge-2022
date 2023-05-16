@@ -450,6 +450,10 @@ class Gurobi_Problem:
         self.m.setObjective(sum([wj * (Cj + self.inst.alpha*Uj + self.inst.beta*Tj)
                             for wj, Cj, Uj, Tj in zip(w, JC_vars, U_vars.values(), T_vars.values())]),
                             GRB.MINIMIZE)
+        
+        # store variables
+        self.B_vars, self.C_vars, self.T_vars, self.U_vars = B_vars, C_vars, T_vars, U_vars
+        self.mach_assign, self.oper_assign = mach_assign, oper_assign
 
         print(f"Gurobi problem generated.")
 
@@ -469,7 +473,7 @@ class Gurobi_Problem:
             else:
                 v.Start = 0
         # set greedy operator assignments
-        for (tid, oid), v in self.op_assign.items():
+        for (tid, oid), v in self.oper_assign.items():
             if self.inst.tasks[tid].oid == oid:
                 v.Start = 1
             else:
