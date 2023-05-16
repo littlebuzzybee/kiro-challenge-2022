@@ -345,15 +345,16 @@ class Gurobi_Problem:
 
         self.m = gp.Model(self.inst.name)
         
-        # big M
-        M = 2*max([job.d for job in self.inst.jobs.values()])
+        print(f"Greedy solving for time horizon estimation")
+        self.inst.greedy_solve()
+        T = int(max([j.C() for j in self.inst.jobs.values()]) * 1.25)
 
         B_vars = {}
         C_vars = {}
         T_vars = {}
         U_vars = {}
-
-        print(f"Adding jobs/tasks variables and constraints...")
+        
+        print("Adding jobs/tasks variables and constraints...")
 
         for job in self.inst.jobs.values():
             for tid in job.S:
@@ -363,7 +364,7 @@ class Gurobi_Problem:
                 B_vars[tid] = Bi
                 C_vars[tid] = Ci
                 self.m.addConstr(Ci >= Bi + task.p)  # C_i >= B_i + p_i
-            
+
             self.m.addConstr(B_vars[job.S[0]] >= job.r)  # B_i >= r_{j(i)}
 
             for idx in range(1, len(job.S)):
@@ -373,71 +374,82 @@ class Gurobi_Problem:
             Tj = self.m.addVar(name=f"T{job.id}", vtype=GRB.INTEGER)
             T_vars[job.id] = Tj
             # T_j = max(0, C_j - d_j)
-            # self.m.addConstr(Tj >= 0)  # redundant with integer default lower bound
+            # m.addConstr(Tj >= 0)  # redundant with integer default lower bound
             self.m.addConstr(Tj >= C_vars[job.S[-1]] - job.d)
 
             # unit penalty
             Uj = self.m.addVar(name=f"U{job.id}", vtype=GRB.BINARY)
             U_vars[job.id] = Uj
             # U_j = 1 if T_j > 0 else 0
-            #self.m.addConstr((Uj == 0) >> (Tj == 0))
-            self.m.addConstr(M * Uj >= Tj)
+            self.m.addConstr((Uj == 0) >> (Tj == 0))
 
-        print(f"Adding machines and operators variables and constraints...")
 
+        print("Creating running tables...")
+        
+        running_after_B  = self.m.addVars(range(1, T+1), range(1, self.inst.I+1), vtype=GRB.BINARY)
+        running_before_C = self.m.addVars(range(1, T+1), range(1, self.inst.I+1), vtype=GRB.BINARY)
+        running          = self.m.addVars(range(1, T+1), range(1, self.inst.I+1), vtype=GRB.BINARY)
+        
+        for t, tid in running_after_B.keys():
+            self.m.addConstr((running_after_B[t, tid] == 0) >> (t <= B_vars[tid] - 1))
+            self.m.addConstr((running_after_B[t, tid] == 1) >> (t >= B_vars[tid]))
+        for t, tid in running_before_C.keys():
+            self.m.addConstr((running_before_C[t, tid] == 0) >> (t >= C_vars[tid]))
+            self.m.addConstr((running_before_C[t, tid] == 1) >> (t <= C_vars[tid] - 1))
+        for t, tid in running.keys():
+            self.m.addConstr(running[t, tid] == gp.and_(running_after_B[t, tid], running_before_C[t, tid]))
+
+        
+        print("Creating machines and operators task assignments tables...")
+        
         mach_assign = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
                 mids = set([worker.mid for worker in task.workers])  # unique machine ids that can process this task
                 for mid in mids:
-                    mach_assign[tid, mid] = self.m.addVar(name=f"task{tid}_machine{mid}", vtype=GRB.BINARY)
-                # each task is assigned to exactly one machine
+                    mach_assign[tid, mid] = self.m.addVar(name=f"task_{tid}_machine_{mid}", vtype=GRB.BINARY)
                 self.m.addConstr(sum([mach_assign[tid, mid] for mid in mids]) == 1)
 
-        op_assign = {}
+        oper_assign = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
                 oids = set([worker.oid for worker in task.workers])  # unique operator ids that can process this task
                 for oid in oids:
-                    op_assign[tid, oid] = self.m.addVar(name=f"task{tid}_operator{oid}", vtype=GRB.BINARY)
-                # each task is assigned to exactly one operator
-                self.m.addConstr(sum([op_assign[tid, oid] for oid in oids]) == 1)
+                    oper_assign[tid, oid] = self.m.addVar(name=f"task_{tid}_operator_{oid}", vtype=GRB.BINARY)
+                self.m.addConstr(sum([oper_assign[tid, oid] for oid in oids]) == 1)
+                
+        print("Creating machines and operators business tables...")
+        
+        mach_business = self.m.addVars(range(1, T+1), range(1, self.inst.M+1), vtype=GRB.INTEGER)
+        oper_business = self.m.addVars(range(1, T+1), range(1, self.inst.O+1), vtype=GRB.INTEGER)
+        for t, mid in mach_business.keys():
+            self.m.addConstr(mach_business[t, mid] <= 1)
+        for t, oid in oper_business.keys():
+            self.m.addConstr(oper_business[t, oid] <= 1)
+            
+        for t, mid in mach_business.keys():
+            assigned_and_running = []
+            for tid in [k[0] for k in mach_assign.keys() if k[1] == mid]:
+                assigned_and_running.append(self.m.addVar(vtype=GRB.INTEGER))
+                self.m.addConstr(assigned_and_running[-1] == gp.and_(mach_assign[tid, mid], running[t, tid]))
+            self.m.addConstr(mach_business[t, mid] == sum(assigned_and_running))
 
-        for mid in set([k[1] for k in mach_assign.keys()]):  # iterate over machines
-            for (tid1, tid2) in combination(set([k[0] for k in mach_assign.keys() if k[1] == mid]), 2):
-                indic1 = self.m.addVar(name=f"machine{mid}_C{tid1}>B{tid2}", vtype=GRB.BINARY)
-                indic2 = self.m.addVar(name=f"machine{mid}_C{tid2}>B{tid1}", vtype=GRB.BINARY)
-                #self.m.addConstr((indic1 == 0) >> (C_vars[tid1] <= B_vars[tid2]))  # C1 > B2 => indic1 = 1
-                #self.m.addConstr((indic2 == 0) >> (C_vars[tid2] <= B_vars[tid1]))  # C2 > B1 => indic2 = 1
-                self.m.addConstr(C_vars[tid1] - B_vars[tid2] <= M * indic1)  # C1 > B2 => indic1 = 1
-                self.m.addConstr(C_vars[tid2] - B_vars[tid1] <= M * indic2)  # C2 > B1 => indic2 = 1
-                # if sum below is 4, then machine is simultaneously processing both tasks at some point
-                self.m.addConstr(indic1 + indic2 + mach_assign[tid1, mid] + mach_assign[tid2, mid] <= 3)
-
-        for oid in set([k[1] for k in op_assign.keys()]):  # iterate over operators
-            for (tid1, tid2) in combination(set([k[0] for k in op_assign.keys() if k[1] == oid]), 2):
-                indic1 = self.m.addVar(name=f"operator{oid}_C{tid1}>B{tid2}", vtype=GRB.BINARY)
-                indic2 = self.m.addVar(name=f"operator{oid}_C{tid2}>B{tid1}", vtype=GRB.BINARY)
-                #self.m.addConstr((indic1 == 0) >> (C_vars[tid1] <= B_vars[tid2]))  # C1 > B2 => indic1 = 1
-                #self.m.addConstr((indic2 == 0) >> (C_vars[tid2] <= B_vars[tid1]))  # C2 > B1 => indic2 = 1
-                self.m.addConstr(C_vars[tid1] - B_vars[tid2] <= M * indic1)  # C1 > B2 => indic1 = 1
-                self.m.addConstr(C_vars[tid2] - B_vars[tid1] <= M * indic2)  # C2 > B1 => indic2 = 1
-                # if sum below is 4, then operator is simultaneously handling both tasks at some point
-                self.m.addConstr(indic1 + indic2 + op_assign[tid1, oid] + op_assign[tid2, oid] <= 3)
-
-        print(f"Adding objective function...")
-
+        for t, oid in oper_business.keys():
+            assigned_and_running = []
+            for tid in [k[0] for k in oper_assign.keys() if k[1] == oid]:
+                assigned_and_running.append(self.m.addVar(vtype=GRB.INTEGER))
+                self.m.addConstr(assigned_and_running[-1] == gp.and_(oper_assign[tid, oid], running[t, tid]))
+            self.m.addConstr(oper_business[t, oid] == sum(assigned_and_running))
+        
+        print("Adding objective function...")
+        
         w = [job.w for job in self.inst.jobs.values()]  # job weights
         JC_vars = [C_vars[job.S[-1]] for job in self.inst.jobs.values()]  # job completion dates
         self.m.setObjective(sum([wj * (Cj + self.inst.alpha*Uj + self.inst.beta*Tj)
-                                for wj, Cj, Uj, Tj in zip(w, JC_vars, U_vars.values(), T_vars.values())]),
+                            for wj, Cj, Uj, Tj in zip(w, JC_vars, U_vars.values(), T_vars.values())]),
                             GRB.MINIMIZE)
-        
-        # store variables
-        self.B_vars, self.C_vars, self.T_vars, self.U_vars = B_vars, C_vars, T_vars, U_vars
-        self.mach_assign, self.op_assign = mach_assign, op_assign
 
         print(f"Gurobi problem generated.")
 
