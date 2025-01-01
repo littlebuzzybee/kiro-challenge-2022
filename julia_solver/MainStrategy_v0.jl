@@ -152,7 +152,7 @@ jobs_weights,
 jobs_release_date,
 jobs_due_date,
 last_task_of_jobs,
-job_of_task = import_init(path*"instances/tiny.json");
+job_of_task = import_init(path*"instances/huge.json");
 
 
 
@@ -170,4 +170,4 @@ job_of_task = import_init(path*"instances/tiny.json");
                 job_of_task);
 
 
-
+sol_cost

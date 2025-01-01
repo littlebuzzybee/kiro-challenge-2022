@@ -1,0 +1,54 @@
+#ifndef UTILS_H
+#define UTILS_H
+
+#include <iostream>
+#include "nlohmann/json.hpp"
+
+
+struct Job {
+    int id;
+    int release_date;
+    int due_date;
+    int weight;
+    std::vector<int> sequence;
+};
+
+struct Task {
+    int id;
+    int processing_time;
+    int job_parent;
+    std::vector<int> machines;
+    std::vector<std::vector<int>> operators;
+};
+
+struct Instance {
+    // size
+    int nb_jobs;
+    int nb_tasks;
+    int nb_machines;
+    int nb_operators;
+
+    // costs
+    int unit_penalty;
+    int tardiness;
+    int interim;
+
+    // jobs
+    std::vector<Job> jobs;
+    std::vector<Task> tasks;
+};
+
+struct Solution {
+    // time variables
+    std::vector<int> begin_time_tasks;
+    std::vector<int> end_time_tasks;
+    std::vector<int> completion_date_jobs;
+    // choice variables
+    std::vector<int> machine_choice_tasks;
+    std::vector<int> operator_choice_tasks;
+};
+
+nlohmann::json read_json_file(std::string);
+Instance import_instance(std::string, std::ostream& out_stream);
+
+#endif
