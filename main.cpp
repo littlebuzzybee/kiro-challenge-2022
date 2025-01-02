@@ -46,13 +46,14 @@ void resolve_lookahead(Instance &inst, Solution &sol, int time_cursor, int looka
     log_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]..." << std::endl;
 
 
-    std::set<int> concerned_tasks;
+    std::map<int, std::set<int>> concerned_tasks;
     std::set<int> concerned_jobs;
 
     for (int task_idx = 0; task_idx < inst.nb_tasks; ++task_idx) {
         if (time_cursor <= sol.begin_time_tasks[task_idx] && sol.begin_time_tasks[task_idx] < time_horizon) {
-            concerned_tasks.insert(task_idx);
-            concerned_jobs.insert(inst.tasks[task_idx].job_parent); // inserts an index, not an id
+            int corresponding_job = inst.tasks[task_idx].job_parent;
+            concerned_tasks[corresponding_job].insert(task_idx);
+            concerned_jobs.insert(corresponding_job); // inserts an index, not an id
         }
     }
 
@@ -67,27 +68,67 @@ void resolve_lookahead(Instance &inst, Solution &sol, int time_cursor, int looka
     GRBModel model = GRBModel(env);
     model.set(GRB_StringAttr_ModelName, "time_scheduling_round_"+std::to_string(1));
 
+    
 
-
-    // Declare postpone values and slacks
-    std::map<int, GRBVar> postponement_vars;
+    // Declare postpone values and slacks and unit penalties
+    std::map<int, GRBVar> postponement_vals;
     std::map<int, GRBVar> postponement_slacks;
+    std::map<int, GRBVar> unit_penalties;
 
+    // Changer cela: postponement_vals devra être la somme des postponements des tâches concernées
     for (int job_idx : concerned_jobs) {
-        postponement_vars[job_idx]   = model.addVar(0.0, GRB_INFINITY, 0.0, GRB_INTEGER,
+        postponement_vals[job_idx]   = model.addVar(0.0, GRB_INFINITY, 0.0, GRB_INTEGER,
                                                     "postpone_" + std::to_string(job_idx));
         postponement_slacks[job_idx] = model.addVar(0.0, GRB_INFINITY, 0.0, GRB_INTEGER,
                                                     "slack_" + std::to_string(job_idx));
-        log_stream << "Added postponement & slack variable for job " << job_idx << std::endl;
+        unit_penalties[job_idx] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY,
+                                               "unit_penalty_" + std::to_string(job_idx));
+        log_stream << "Added postponement, slack & unit penalty variables for job " << job_idx << std::endl;
     }
 
     // Declare completion times as variables
-    std::map<int, GRBLinExpr> completion_times_vars;
+    std::map<int, GRBLinExpr> completion_times_vals;
     for (int job_idx : concerned_jobs) {
-            completion_times_vars[job_idx] = GRBLinExpr(sol.completion_date_jobs[job_idx]
-                                + postponement_vars[job_idx]);
+            completion_times_vals[job_idx] = GRBLinExpr(sol.completion_date_jobs[job_idx]
+                                + postponement_vals[job_idx]);
             log_stream << "Added completion time variable for job " << job_idx << std::endl;
         }
+
+    // Set constraint for completion time: completion_time <= due_date + slack
+    std::map<int, GRBConstr> tardiness_time_constraints;
+    for (int job_idx : concerned_jobs) {
+        tardiness_time_constraints[job_idx] = model.addConstr(completion_times_vals[job_idx] <= inst.jobs[job_idx].due_date 
+                        + postponement_slacks[job_idx]);
+        log_stream << "Added completion date constraint for job " << job_idx << std::endl;
+    }
+
+
+    // Set unit penalty variables
+    std::map<int, GRBGenConstr> unit_penalty_constraints;
+    for (int job_idx : concerned_jobs) {
+        // unit_penalty = 1 if completion_time > due_date
+        unit_penalty_constraints[job_idx] = model.addGenConstrIndicator(unit_penalties[job_idx], 0,
+                        completion_times_vals[job_idx], GRB_LESS_EQUAL, inst.jobs[job_idx].due_date);
+        log_stream << "Added unit penalty constraint for job " << job_idx << std::endl;
+    }
+
+
+    // Declare objective function
+    GRBLinExpr objective = 0;
+
+    
+    for (int job_idx : concerned_jobs) {
+        // Set interim costs
+        objective += inst.jobs[job_idx].weight * completion_times_vals[job_idx];
+        // Set tardiness costs
+        objective += inst.tardiness * inst.jobs[job_idx].weight * postponement_slacks[job_idx];
+        // Set unit penalty costs
+        objective += inst.unit_penalty * inst.jobs[job_idx].weight * unit_penalties[job_idx];
+    }
+
+    // Set objective function
+    model.setObjective(objective, GRB_MINIMIZE);
+    log_stream << "Set objective function" << std::endl;
 }
 
 

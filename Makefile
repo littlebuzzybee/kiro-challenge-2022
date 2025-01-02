@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS := -std=c++20 -Wall -Wextra # -O3
+CXXFLAGS := -std=c++20 -Wall -Wextra -O3 # -O3
 
 GUROBI_INCLUDE = /opt/gurobi1200/linux64/include
 GUROBI_LIB = /opt/gurobi1200/linux64/lib
@@ -18,7 +18,7 @@ OBJECTS = $(SOURCES:.cpp=.o)
 all: solve
 
 solve: $(OBJECTS)
-	$(CXX) $(OBJECTS) -o solve $(CXXFLAGS) $(INCLUDES) $(LIBS)
+	$(CXX) $(OBJECTS) -o solve.o $(CXXFLAGS) $(INCLUDES) $(LIBS)
 
 
 main.o: main.cpp
