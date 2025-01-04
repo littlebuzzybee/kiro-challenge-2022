@@ -36,8 +36,6 @@ void partial_initialize_time_scheduling_greedy(Instance& inst, Solution& sol, st
             total_task_offset += inst.tasks[processed_task].processing_time;
         }
         sol.completion_date_jobs[j_idx] = inst.jobs[j_idx].release_date + total_task_offset;
-        assert(sol.completion_date_jobs[j_idx] == sol.end_time_tasks[inst.jobs[j_idx].sequence.back()]);
-        // Print job completion date
         log_stream << "Job " << j_idx << " ** completion date: " << sol.completion_date_jobs[j_idx] << std::endl << std::endl;
     }
 }
@@ -51,6 +49,8 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
 
     std::map<int, std::vector<int>> processed_tasks_of_jobs; // ordered set of tasks for each job
     std::set<int> processed_jobs;
+    // std::set<int> processed_tasks; // ordered redundancy of tasks used for assignment consraints between tasks later on
+    std::vector<int> processed_tasks;
 
 
 
@@ -71,30 +71,47 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
                 int task_idx = job_stacks[job_idx].front();
                 job_stacks[job_idx].pop_front();
                 processed_tasks_of_jobs[job_idx].push_back(task_idx);
+                processed_tasks.push_back(task_idx);
             }
+            // Finally also insert the tasks to be processed together in the processed_tasks set
+            // processed_tasks.insert(processed_tasks_of_jobs[job_idx].begin(), processed_tasks_of_jobs[job_idx].end());
         }
-
     }
 
-    // int nb_processed_tasks = processed_tasks_of_jobs.size();
+    processed_tasks.shrink_to_fit();
+    std::sort(processed_tasks.begin(), processed_tasks.end());
+
     int nb_processed_jobs = processed_jobs.size();
     int nb_pending_tasks = pending_tasks_per_job.size();
+    int nb_processed_tasks = processed_tasks.size();
 
-    std::cout << "There are " << nb_processed_jobs << " jobs processed." << std::endl;
-    for (int job_idx : processed_jobs) {
-        std::cout << "Job " << job_idx << " has " << processed_tasks_of_jobs[job_idx].size() << " tasks processed:   ";
-        for (int task_idx : processed_tasks_of_jobs[job_idx]) {
-            std::cout << "|" << task_idx;
-        }
-        std::cout << "|" << std::endl;
+
+
+
+    log_stream << "There are " << nb_processed_jobs << " jobs processed." << std::endl;
+
+    // print ordered list of concerned tasks
+    log_stream << "They comprise the following processed tasks in the lookahead: ";
+    for (int task_idx : processed_tasks) {
+        log_stream << "|" << task_idx;
     }
-    std::cout << "There are " << nb_pending_tasks << " pending tasks in total." << std::endl;
+    log_stream << "| distributed as follows: " << std::endl;
+
+
+    for (int job_idx : processed_jobs) {
+        log_stream << "Job " << job_idx << " entails " << processed_tasks_of_jobs[job_idx].size() << " tasks ordered as:   ";
+        for (int task_idx : processed_tasks_of_jobs[job_idx]) {
+            log_stream << "|" << task_idx;
+        }
+        log_stream << "|" << std::endl;
+    }
+    log_stream << "There are " << nb_pending_tasks << " pending tasks in total." << std::endl;
 
 
 
 
     // Initialize Gurobi environment and model
-    std::cout << "Initializing Gurobi environment and model..." << std::endl;
+    log_stream << "Initializing Gurobi environment and model..." << std::endl;
     GRBEnv env = GRBEnv(true);
     env.set("LogFile", "gurobi.log");
     env.start();
@@ -105,23 +122,23 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     // Declare the begin times of each task and set the ordering constraints
     std::map<int, std::map<int, GRBVar>> begin_times_tasks_per_job;
 
+    log_stream << "Declaring scheduling variables and constraints for processed job..." << std::endl;
     for (int job_idx : processed_jobs) {
         // First, Declare the begin times variables of each task
-        std::cout << "Declaring variables for job " << job_idx << "..." << std::endl;
 
         for (int task_idx : processed_tasks_of_jobs[job_idx]) {
 
-            GRBVar new_var = model.addVar(time_cursor, GRB_INFINITY, 0.0, GRB_INTEGER,
-                "begin_time_task_" + std::to_string(task_idx));
-            begin_times_tasks_per_job[job_idx].emplace(task_idx, new_var);
-            assert(begin_times_tasks_per_job[job_idx].contains(task_idx));
+            begin_times_tasks_per_job[job_idx].emplace(
+                task_idx,
+                model.addVar(time_cursor, GRB_INFINITY, 0.0, GRB_INTEGER,
+                    "begin_time_task_" + std::to_string(task_idx))
+            );
         }
 
-        std::cout << "Successfully added begin time variables for all tasks." << std::endl;
 
 
         // Then, set the ordering constraints
-        for (int i = 0; i < processed_tasks_of_jobs[job_idx].size(); i++) {
+        for (int i = 0; i < int(processed_tasks_of_jobs[job_idx].size()); i++) {
             int task_idx = processed_tasks_of_jobs[job_idx][i];
 
             if (task_idx == processed_tasks_of_jobs[job_idx].front()) {
@@ -150,15 +167,13 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
                 // we prevent the task from starting before the end of the previous task (no overlapping)
                 int next_task_idx = processed_tasks_of_jobs[job_idx][i + 1];
 
-                assert(begin_times_tasks_per_job[job_idx].contains(task_idx));
-                assert(begin_times_tasks_per_job[job_idx].contains(next_task_idx));
+
                 model.addConstr(GRBLinExpr(begin_times_tasks_per_job[job_idx][task_idx] + inst.tasks[task_idx].processing_time),
                     GRB_LESS_EQUAL,
                     begin_times_tasks_per_job[job_idx][next_task_idx],
                     "rel_ordering_task_" + std::to_string(task_idx));
             }
         }
-        std::cout << "Successfully added time ordering constraints for all tasks." << std::endl;
     }
 
 
@@ -166,52 +181,219 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     std::map<int, GRBVar> tardiness_post_slacks;
     std::map<int, GRBVar> unit_penalties;
 
-
+    log_stream << "Adding slack variable for all jobs. " << std::endl;
     for (int job_idx : processed_jobs) {
         tardiness_post_slacks[job_idx] = model.addVar(0.0, GRB_INFINITY, 0.0, GRB_INTEGER,
             "slack_" + std::to_string(job_idx));
         unit_penalties[job_idx] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY,
             "unit_penalty_" + std::to_string(job_idx));
-        log_stream << "Added slack variable for job " << job_idx << std::endl;
     }
+
 
 
     // Define the resulting completion dates variable of each processed job
     // as the sum of its current completion date and the postponement due to task delays
     std::map<int, GRBLinExpr> additional_delays_jobs;
     std::map<int, GRBLinExpr> new_completion_dates_jobs;
+    log_stream << "Adding completion date variable for all jobs..." << std::endl;
     for (int job_idx : processed_jobs) {
         int last_task_of_job = processed_tasks_of_jobs[job_idx].back();
 
         additional_delays_jobs[job_idx] = GRBLinExpr(begin_times_tasks_per_job[job_idx][last_task_of_job] - sol.begin_time_tasks[last_task_of_job]);
         new_completion_dates_jobs[job_idx] = GRBLinExpr(sol.completion_date_jobs[job_idx] + additional_delays_jobs[job_idx]);
-        log_stream << "Added completion date variable for job " << job_idx << std::endl;
     }
 
 
     // Set constraint for completion time: completion_time <= due_date + slack
-    std::map<int, GRBConstr> tardiness_time_constraints;
+    log_stream << "Adding completion date constraint for all jobs..." << std::endl;
     for (int job_idx : processed_jobs) {
-        tardiness_time_constraints[job_idx] = model.addConstr(new_completion_dates_jobs[job_idx] <= inst.jobs[job_idx].due_date
-            + tardiness_post_slacks[job_idx]);
-        log_stream << "Added completion date constraint for job " << job_idx << std::endl;
+        model.addConstr(
+            new_completion_dates_jobs[job_idx] <= inst.jobs[job_idx].due_date + tardiness_post_slacks[job_idx]
+        );
     }
 
 
     // Set unit penalty variables
-    std::map<int, GRBGenConstr> unit_penalty_constraints;
+    log_stream << "Adding unit penalty constraint all jobs..." << std::endl;
     for (int job_idx : processed_jobs) {
         // unit_penalty = 1 if completion_time > due_date
-        unit_penalty_constraints[job_idx] = model.addGenConstrIndicator(unit_penalties[job_idx], 0,
-            new_completion_dates_jobs[job_idx], GRB_LESS_EQUAL, inst.jobs[job_idx].due_date);
-        log_stream << "Added unit penalty constraint for job " << job_idx << std::endl;
+        model.addGenConstrIndicator(
+            unit_penalties[job_idx],
+            0, // false
+            new_completion_dates_jobs[job_idx], GRB_LESS_EQUAL, inst.jobs[job_idx].due_date
+        );
     }
 
 
-    // Declare objective function
+
+    // Declare the assigned machines and operators variables for every task
+    std::map<int, std::map<int, GRBVar>> assigned_tasks_operators_per_job;
+    std::map<int, std::map<int, GRBVar>> assigned_tasks_machines_per_job;
+
+    log_stream << "Declaring assignment variables..." << std::endl;
+    for (int job_idx : processed_jobs) {
+        for (int task_idx : processed_tasks_of_jobs[job_idx]) {
+
+            assigned_tasks_operators_per_job[job_idx].emplace(
+                task_idx,
+                model.addVar(0, inst.nb_operators, 0.0, GRB_INTEGER,
+                    "operator_task" + std::to_string(task_idx))
+            );
+
+            assigned_tasks_machines_per_job[job_idx].emplace(
+                task_idx,
+                model.addVar(0, inst.nb_operators, 0.0, GRB_INTEGER,
+                    "machine_task" + std::to_string(task_idx))
+            );
+        }
+    }
+
+    // Set the assignment exclusion constraints
+    log_stream << "Setting assignment exclusion constraints..." << std::endl;
+
+    std::map <std::pair<int, int>, GRBVar> tasks_overlapping_machines;
+    std::map <std::pair<int, int>, GRBVar> tasks_overlapping_operators;
+    log_stream << "Setting exclusion constraints for overlapping machines and operators..." << std::endl;
+
+    for (int t_idx_id1 = 0; t_idx_id1 < nb_processed_tasks; t_idx_id1++) {
+        for (int t_idx_id2 = t_idx_id1 + 1; t_idx_id2 < nb_processed_tasks; t_idx_id2++) {
+
+
+            int task_idx1 = processed_tasks[t_idx_id1];
+            int task_idx2 = processed_tasks[t_idx_id2];
+
+            int parent_job1 = inst.tasks[task_idx1].job_parent;
+            int parent_job2 = inst.tasks[task_idx2].job_parent;
+
+            if (parent_job1 != parent_job2) {
+                // If the tasks belong to the same job, no need to set exclusion constraints since time scheduling constraints already prevent overlapping
+                // If not, we set the exclusion constraints for the tasks' respective operators and machines
+
+
+                //  ******************************************************************************************************
+                // ************ Declare common variables for both machine and operator overlapping exclusions ************
+                //  ******************************************************************************************************
+                GRBVar& begin_time_task1 = begin_times_tasks_per_job[parent_job1][task_idx1];
+                GRBVar& begin_time_task2 = begin_times_tasks_per_job[parent_job2][task_idx2];
+
+
+                GRBVar diff_ti_aft = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
+                GRBVar diff_ti_bef = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
+
+                model.addGenConstrIndicator(diff_ti_aft, 1, begin_time_task1 + inst.tasks[task_idx1].processing_time <= begin_time_task2);
+                model.addGenConstrIndicator(diff_ti_bef, 1, begin_time_task2 + inst.tasks[task_idx2].processing_time <= begin_time_task1);
+                //  diff_ti_aft activates => task2 starts after task1 ends
+                //  diff_ti_bef activates => task1 starts after task2 ends
+
+                //  ******************************************************
+                //  ************ Prevent overlapping operators ***********
+                //  ******************************************************
+                GRBVar& operator_task1 = assigned_tasks_operators_per_job[parent_job1][task_idx1];
+                GRBVar& operator_task2 = assigned_tasks_operators_per_job[parent_job2][task_idx2];
+
+                GRBVar diff_op_lte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
+                GRBVar diff_op_gte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
+
+
+                model.addGenConstrIndicator(diff_op_lte, 1, operator_task1 <= operator_task2 - 1);
+                model.addGenConstrIndicator(diff_op_gte, 1, operator_task1 >= operator_task2 + 1);
+                // diff_op_lte activates => operator_task1 < operator_task2
+                // diff_op_gte activates => operator_task1 > operator_task2
+
+
+                // The true disjunction of the below 4 literals is equivalent to
+                // operators of the two tasks do not overlap
+                const GRBVar exclusion_same_operator[4] = {
+                    diff_op_lte,
+                    diff_op_gte,
+                    diff_ti_aft,
+                    diff_ti_bef
+                };
+
+                // Create the overlapping variable for operators
+                tasks_overlapping_operators[{task_idx1, task_idx2}] = model.addVar(
+                    0.0,
+                    1.0,
+                    0.0,
+                    GRB_BINARY,
+                    "operators_overlap_for_tasks_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
+                );
+
+
+                // Force the overlapping variable to be equal to the disjunction of the above literals and store it in the map
+                model.addGenConstrOr(
+                    tasks_overlapping_operators[{task_idx1, task_idx2}],
+                    exclusion_same_operator,
+                    4, // number of literals in the above array of boolean variables
+                    "activates_if_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
+                );
+
+                // Finally constrain it to be equal to 0 (false) in the model
+                model.addConstr(
+                    tasks_overlapping_operators[{task_idx1, task_idx2}] == 0,
+                    "exclusion_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
+                );
+
+
+                //  ******************************************************
+                //  ************ Prevent overlapping machines ************
+                //  ******************************************************
+                GRBVar& machine_task1 = assigned_tasks_machines_per_job[parent_job1][task_idx1];
+                GRBVar& machine_task2 = assigned_tasks_machines_per_job[parent_job2][task_idx2];
+
+                GRBVar diff_ma_lte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
+                GRBVar diff_ma_gte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
+
+                model.addGenConstrIndicator(diff_ma_lte, 1, machine_task1 <= machine_task2 - 1);
+                model.addGenConstrIndicator(diff_ma_gte, 1, machine_task1 >= machine_task2 + 1);
+                // diff_ma_lte activates => machine_task1 < machine_task2
+                // diff_ma_gte activates => machine_task1 > machine_task2
+
+                // The true disjunction of the below 4 literals is equivalent to
+                // machines of the two tasks do not overlap
+                const GRBVar exclusion_same_machine[4] = {
+                    diff_ma_lte,
+                    diff_ma_gte,
+                    diff_ti_aft,
+                    diff_ti_bef
+                };
+
+                // Create the overlapping variable for machines
+                tasks_overlapping_machines[{task_idx1, task_idx2}] = model.addVar(
+                    0.0,
+                    1.0,
+                    0.0,
+                    GRB_BINARY,
+                    "machines_overlap_for_tasks_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
+                );
+
+
+                // Force the overlapping variable to be equal to the disjunction of the above literals and store it in the map
+                model.addGenConstrOr(
+                    tasks_overlapping_machines[{task_idx1, task_idx2}],
+                    exclusion_same_machine,
+                    4, // number of literals in the above array of boolean variables
+                    "activates_if_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
+                );
+
+                // Finally constrain it to be equal to 0 (false) in the model
+                model.addConstr(
+                    tasks_overlapping_machines[{task_idx1, task_idx2}] == 0,
+                    "exclusion_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
+                );
+
+
+            }
+        }
+    }
+
+
+
+    // Set objective function
+        // Declare objective function
     GRBLinExpr objective = 0;
 
-
+    log_stream << "Setting the objective function..." << std::endl;
     for (int job_idx : processed_jobs) {
         // Set interim costs
         objective += inst.jobs[job_idx].weight * new_completion_dates_jobs[job_idx];
@@ -219,17 +401,15 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
         objective += inst.tardiness * inst.jobs[job_idx].weight * tardiness_post_slacks[job_idx];
         // Set unit penalty costs
         objective += inst.unit_penalty * inst.jobs[job_idx].weight * unit_penalties[job_idx];
-
-        log_stream << "Added costs for job " << job_idx << std::endl;
     }
 
-    // Set objective function
+    log_stream << "Setting objective function." << std::endl;
     model.setObjective(objective, GRB_MINIMIZE);
-    log_stream << "Set objective function" << std::endl;
+
 
 
     // Delay all upcoming tasks coming after the horizon by the job's delay that was just resolved
-
+    // Update the choices made by the optimization
 }
 
 

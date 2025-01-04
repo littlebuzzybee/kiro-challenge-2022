@@ -1,5 +1,7 @@
 CXX = g++
-CXXFLAGS := -std=c++20 -Wall -Wextra -O3 # -O3
+CXXFLAGS := -std=c++20 -Wall -Wextra -Werror
+
+OPTIONAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs -fanalyzer -pedantic
 
 GUROBI_INCLUDE = /opt/gurobi1200/linux64/include
 GUROBI_LIB = /opt/gurobi1200/linux64/lib
@@ -15,7 +17,21 @@ LIBS = -L$(GUROBI_LIB) -L$(ORTOOLS_LIB) -lgurobi_c++ -lgurobi120 -lortools
 SOURCES = main.cpp utils.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
-all: solve
+INSTANCES_DIR = instances
+
+debug: CXXFLAGS += -g3 -O0  # -g0..3 (g default), and pg is for gprof
+debug: solve
+
+build: CXXFLAGS += -O3 -DNDEBUG $(OPTIONAL_FLAGS)
+build: solve
+
+profile: CXXFLAGS += -pg -O3
+profile: solve
+
+# simple rule to build the program
+simple: CXXFLAGS += -Os
+simple: solve
+
 
 solve: $(OBJECTS)
 	$(CXX) $(OBJECTS) -o solve.o $(CXXFLAGS) $(INCLUDES) $(LIBS)
@@ -28,9 +44,10 @@ utils.o: utils.cpp
 	$(CXX) -c utils.cpp -o utils.o $(CXXFLAGS) $(INCLUDES)
 
 clean:
-	rm -f solve *.o
+	rm -f *.o
 
 run:	
-	./solve
+	./solve.o
 
-
+analyse:
+	./solve.o $(INSTANCES_DIR)/tiny.json && gprof -q ./solve.o gmon.out > analysis.txt
