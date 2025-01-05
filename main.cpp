@@ -12,6 +12,8 @@
 #include "utils.h"
 #include "nlohmann/json.hpp"
 
+// #define QUADRATIC
+
 
 
 void partial_initialize_time_scheduling_greedy(Instance& inst, Solution& sol, std::ostream& log_stream = std::cout) {
@@ -43,6 +45,8 @@ void partial_initialize_time_scheduling_greedy(Instance& inst, Solution& sol, st
 
 
 void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<int>> job_stacks, std::unordered_map<int, int> pending_tasks_per_job, int time_cursor, int lookahead_duration, std::ostream& log_stream = std::cout) {
+    
+    
     const int time_horizon = time_cursor + lookahead_duration;
     log_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]..." << std::endl;
 
@@ -54,9 +58,9 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
 
 
 
-    // Begin by identifying the tasks that are concerned by the lookahead
+    // Begin by identifying the tasks that are relevant in the lookahead window
     for (int job_idx = 0; job_idx < inst.nb_jobs; ++job_idx) {
-        if (job_stacks[job_idx].empty()) {
+        if (job_stacks[job_idx].empty() || inst.jobs[job_idx].release_date >= time_horizon) {
             continue;
         }
         else {
@@ -66,7 +70,7 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
             processed_jobs.insert(job_idx); // inserts an index, not an id
             while (!job_stacks[job_idx].empty()
                 && time_cursor <= sol.begin_time_tasks[job_stacks[job_idx].front()]
-                && sol.begin_time_tasks[job_stacks[job_idx].front()] <= time_horizon
+                &&                sol.begin_time_tasks[job_stacks[job_idx].front()] < time_horizon
                 ) {
                 int task_idx = job_stacks[job_idx].front();
                 job_stacks[job_idx].pop_front();
@@ -81,21 +85,22 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     processed_tasks.shrink_to_fit();
     std::sort(processed_tasks.begin(), processed_tasks.end());
 
+
+
     int nb_processed_jobs = processed_jobs.size();
     int nb_pending_tasks = pending_tasks_per_job.size();
     int nb_processed_tasks = processed_tasks.size();
 
 
 
-
+    // Print the list of processed tasks and jobs in the log stream
     log_stream << "There are " << nb_processed_jobs << " jobs processed." << std::endl;
 
-    // print ordered list of concerned tasks
     log_stream << "They comprise the following processed tasks in the lookahead: ";
     for (int task_idx : processed_tasks) {
-        log_stream << "|" << task_idx;
+        log_stream << ";" << task_idx;
     }
-    log_stream << "| distributed as follows: " << std::endl;
+    log_stream << " distributed as follows: " << std::endl << std::endl;
 
 
     for (int job_idx : processed_jobs) {
@@ -105,9 +110,15 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
         }
         log_stream << "|" << std::endl;
     }
-    log_stream << "There are " << nb_pending_tasks << " pending tasks in total." << std::endl;
+    log_stream << std::endl << "There are " << nb_pending_tasks << " pending tasks in total." << std::endl;
 
-
+    // Compute the maximum duration of the processed tasks
+    int max_duration = 0;
+    max_duration = *std::max_element(processed_tasks.begin(), processed_tasks.end(),
+        [&inst](int t1, int t2) {
+            return inst.tasks[t1].processing_time < inst.tasks[t2].processing_time;
+        });
+    log_stream << "Max duration of processed tasks: " << max_duration << std::endl;
 
 
     // Initialize Gurobi environment and model
@@ -151,7 +162,7 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
                     model.addConstr(GRBLinExpr(sol.end_time_tasks[previous_fixed_task]),
                         GRB_LESS_EQUAL,
                         begin_times_tasks_per_job[job_idx][task_idx],
-                        "thresh_begin_time_task_" + std::to_string(task_idx));
+                        "lb_begin_time_task_" + std::to_string(task_idx));
                 }
                 else {
                     // If there is no pending task for this job overlapping the window's beginning,
@@ -159,7 +170,7 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
                     model.addConstr(GRBLinExpr(time_cursor),
                         GRB_LESS_EQUAL,
                         begin_times_tasks_per_job[job_idx][task_idx],
-                        "rel_ordering_task_" + std::to_string(task_idx));
+                        "lb_begin_time_task_" + std::to_string(task_idx));
                 }
             }
             else if ((task_idx != processed_tasks_of_jobs[job_idx].front()) && (task_idx != processed_tasks_of_jobs[job_idx].back())) {
@@ -171,7 +182,7 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
                 model.addConstr(GRBLinExpr(begin_times_tasks_per_job[job_idx][task_idx] + inst.tasks[task_idx].processing_time),
                     GRB_LESS_EQUAL,
                     begin_times_tasks_per_job[job_idx][next_task_idx],
-                    "rel_ordering_task_" + std::to_string(task_idx));
+                    "scheduling_order_tasks_" + std::to_string(task_idx) + "_" + std::to_string(next_task_idx));
             }
         }
     }
@@ -181,12 +192,12 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     std::map<int, GRBVar> tardiness_post_slacks;
     std::map<int, GRBVar> unit_penalties;
 
-    log_stream << "Adding slack variable for all jobs. " << std::endl;
+    log_stream << "Adding slack and penalty variables for all jobs. " << std::endl;
     for (int job_idx : processed_jobs) {
         tardiness_post_slacks[job_idx] = model.addVar(0.0, GRB_INFINITY, 0.0, GRB_INTEGER,
-            "slack_" + std::to_string(job_idx));
+            "due_date_slack_job_" + std::to_string(job_idx));
         unit_penalties[job_idx] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY,
-            "unit_penalty_" + std::to_string(job_idx));
+            "unit_penalty_job_" + std::to_string(job_idx));
     }
 
 
@@ -199,7 +210,7 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     for (int job_idx : processed_jobs) {
         int last_task_of_job = processed_tasks_of_jobs[job_idx].back();
 
-        additional_delays_jobs[job_idx] = GRBLinExpr(begin_times_tasks_per_job[job_idx][last_task_of_job] - sol.begin_time_tasks[last_task_of_job]);
+        additional_delays_jobs[job_idx]    = GRBLinExpr(begin_times_tasks_per_job[job_idx][last_task_of_job] - sol.begin_time_tasks[last_task_of_job]);
         new_completion_dates_jobs[job_idx] = GRBLinExpr(sol.completion_date_jobs[job_idx] + additional_delays_jobs[job_idx]);
     }
 
@@ -208,7 +219,8 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     log_stream << "Adding completion date constraint for all jobs..." << std::endl;
     for (int job_idx : processed_jobs) {
         model.addConstr(
-            new_completion_dates_jobs[job_idx] <= inst.jobs[job_idx].due_date + tardiness_post_slacks[job_idx]
+            new_completion_dates_jobs[job_idx] <= inst.jobs[job_idx].due_date + tardiness_post_slacks[job_idx],
+            "completed_after_due_date_slack_job_" + std::to_string(job_idx)
         );
     }
 
@@ -220,7 +232,8 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
         model.addGenConstrIndicator(
             unit_penalties[job_idx],
             0, // false
-            new_completion_dates_jobs[job_idx], GRB_LESS_EQUAL, inst.jobs[job_idx].due_date
+            new_completion_dates_jobs[job_idx], GRB_LESS_EQUAL, inst.jobs[job_idx].due_date,
+            "unit_penalty_if_overshoot_job_" + std::to_string(job_idx)
         );
     }
 
@@ -255,6 +268,11 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_operators;
     log_stream << "Setting exclusion constraints for overlapping machines and operators..." << std::endl;
 
+    int big_M_time = time_horizon + max_duration;
+    int big_M_operator = inst.nb_operators;
+    int big_M_machine = inst.nb_machines;
+    double eps = 1e-2;
+
     for (int t_idx_id1 = 0; t_idx_id1 < nb_processed_tasks; t_idx_id1++) {
         for (int t_idx_id2 = t_idx_id1 + 1; t_idx_id2 < nb_processed_tasks; t_idx_id2++) {
 
@@ -266,128 +284,73 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
             int parent_job2 = inst.tasks[task_idx2].job_parent;
 
             if (parent_job1 != parent_job2) {
-                // If the tasks belong to the same job, no need to set exclusion constraints since time scheduling constraints already prevent overlapping
-                // If not, we set the exclusion constraints for the tasks' respective operators and machines
+                GRBVar& bt1 = begin_times_tasks_per_job[parent_job1][task_idx1];
+                GRBVar& bt2 = begin_times_tasks_per_job[parent_job2][task_idx2];
+
+                int& pt1 = inst.tasks[task_idx1].processing_time;
+                int& pt2 = inst.tasks[task_idx2].processing_time;
+
+                GRBVar& o1 = assigned_tasks_operators_per_job[parent_job1][task_idx1];
+                GRBVar& o2 = assigned_tasks_operators_per_job[parent_job2][task_idx2];
+                GRBVar& m1 = assigned_tasks_machines_per_job[parent_job1][task_idx1];
+                GRBVar& m2 = assigned_tasks_machines_per_job[parent_job2][task_idx2];
+
+#if defined(QUADRATIC)
+                model.addQConstr(-(bt1 + pt1 - bt2) * (bt2 + pt2 - bt1) + (o1 - o2) * (o1 - o2) >= 0, "operators_exclusion_constraints_tasks_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2));
+                model.addQConstr(-(bt1 + pt1 - bt2) * (bt2 + pt2 - bt1) + (m1 - m2) * (m1 - m2) >= 0, "machines_exclusion_constraints_tasks_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2));
+#else
+                // Construct the variable encoding time overlap between the two tasks
+                GRBVar d1 = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "task_" + std::to_string(task_idx1) + "_starts_after_" + std::to_string(task_idx2));
+                GRBVar d2 = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "task_" + std::to_string(task_idx1) + "_starts_before_" + std::to_string(task_idx2));
+
+                model.addConstr(bt1 >= (bt2 + pt2) - big_M_time * (1 - d2));
+                model.addConstr(bt1 <= (bt2 + pt2) - eps + big_M_time * d2);
+
+                model.addConstr(bt2 >= (bt1 + pt1) - big_M_time * (1 - d1));
+                model.addConstr(bt2 <= (bt1 + pt1) - eps + big_M_time * d1);
+
+                GRBLinExpr time_overlap = 1 - d1 - d2; // in {0, 1}, 1 IF overlap; 0 IF NO overlap
 
 
-                //  ******************************************************************************************************
-                // ************ Declare common variables for both machine and operator overlapping exclusions ************
-                //  ******************************************************************************************************
-                GRBVar& begin_time_task1 = begin_times_tasks_per_job[parent_job1][task_idx1];
-                GRBVar& begin_time_task2 = begin_times_tasks_per_job[parent_job2][task_idx2];
+
+                // Construct the variable encoding operator overlap between the two tasks
+                GRBVar e1 = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "operator_task_" + std::to_string(task_idx1) + "_is_GTE_task_" + std::to_string(task_idx2));
+                GRBVar e2 = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "operator_task_" + std::to_string(task_idx1) + "_is_LTE_task_" + std::to_string(task_idx2));
+
+                model.addConstr(o1 >= o2 - big_M_operator * (1 - e1));
+                model.addConstr(o1 <= o2 - eps + big_M_operator * e1);
+
+                model.addConstr(o2 >= o1 - big_M_operator * (1 - e2));
+                model.addConstr(o2 <= o1 - eps + big_M_operator * e2);
+
+                GRBLinExpr operator_overlap = e1 + e2; // in {1, 2}, 2 IF overlap; 1 IF NO overlap
 
 
-                GRBVar diff_ti_aft = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
-                GRBVar diff_ti_bef = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
 
-                model.addGenConstrIndicator(diff_ti_aft, 1, begin_time_task1 + inst.tasks[task_idx1].processing_time <= begin_time_task2);
-                model.addGenConstrIndicator(diff_ti_bef, 1, begin_time_task2 + inst.tasks[task_idx2].processing_time <= begin_time_task1);
-                //  diff_ti_aft activates => task2 starts after task1 ends
-                //  diff_ti_bef activates => task1 starts after task2 ends
+                // Construct the variable encoding machine overlap between the two tasks
+                GRBVar f1 = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "machine_task_" + std::to_string(task_idx1) + "_is_GTE_task_" + std::to_string(task_idx2));
+                GRBVar f2 = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "machine_task_" + std::to_string(task_idx1) + "_is_LTE_task_" + std::to_string(task_idx2));
+                
+                model.addConstr(m1 >= m2 - big_M_machine * (1 - f1));
+                model.addConstr(m1 <= m2 - eps + big_M_machine * f1);
 
-                //  ******************************************************
-                //  ************ Prevent overlapping operators ***********
-                //  ******************************************************
-                GRBVar& operator_task1 = assigned_tasks_operators_per_job[parent_job1][task_idx1];
-                GRBVar& operator_task2 = assigned_tasks_operators_per_job[parent_job2][task_idx2];
+                model.addConstr(m2 >= m1 - big_M_machine * (1 - f2));
+                model.addConstr(m2 <= m1 - eps + big_M_machine * f2);
 
-                GRBVar diff_op_lte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
-                GRBVar diff_op_gte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
+                GRBLinExpr machine_overlap = f1 + f2; // in {1, 2}, 2 IF overlap; 1 IF NO overlap
 
-
-                model.addGenConstrIndicator(diff_op_lte, 1, operator_task1 <= operator_task2 - 1);
-                model.addGenConstrIndicator(diff_op_gte, 1, operator_task1 >= operator_task2 + 1);
-                // diff_op_lte activates => operator_task1 < operator_task2
-                // diff_op_gte activates => operator_task1 > operator_task2
-
-
-                // The true disjunction of the below 4 literals is equivalent to
-                // operators of the two tasks do not overlap
-                const GRBVar exclusion_same_operator[4] = {
-                    diff_op_lte,
-                    diff_op_gte,
-                    diff_ti_aft,
-                    diff_ti_bef
-                };
-
-                // Create the overlapping variable for operators
-                tasks_overlapping_operators[{task_idx1, task_idx2}] = model.addVar(
-                    0.0,
-                    1.0,
-                    0.0,
-                    GRB_BINARY,
-                    "operators_overlap_for_tasks_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
-                );
-
-
-                // Force the overlapping variable to be equal to the disjunction of the above literals and store it in the map
-                model.addGenConstrOr(
-                    tasks_overlapping_operators[{task_idx1, task_idx2}],
-                    exclusion_same_operator,
-                    4, // number of literals in the above array of boolean variables
-                    "activates_if_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
-                );
-
-                // Finally constrain it to be equal to 0 (false) in the model
-                model.addConstr(
-                    tasks_overlapping_operators[{task_idx1, task_idx2}] == 0,
-                    "exclusion_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
-                );
-
-
-                //  ******************************************************
-                //  ************ Prevent overlapping machines ************
-                //  ******************************************************
-                GRBVar& machine_task1 = assigned_tasks_machines_per_job[parent_job1][task_idx1];
-                GRBVar& machine_task2 = assigned_tasks_machines_per_job[parent_job2][task_idx2];
-
-                GRBVar diff_ma_lte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
-                GRBVar diff_ma_gte = model.addVar(0.0, 1.0, 0.0, GRB_BINARY);
-
-                model.addGenConstrIndicator(diff_ma_lte, 1, machine_task1 <= machine_task2 - 1);
-                model.addGenConstrIndicator(diff_ma_gte, 1, machine_task1 >= machine_task2 + 1);
-                // diff_ma_lte activates => machine_task1 < machine_task2
-                // diff_ma_gte activates => machine_task1 > machine_task2
-
-                // The true disjunction of the below 4 literals is equivalent to
-                // machines of the two tasks do not overlap
-                const GRBVar exclusion_same_machine[4] = {
-                    diff_ma_lte,
-                    diff_ma_gte,
-                    diff_ti_aft,
-                    diff_ti_bef
-                };
-
-                // Create the overlapping variable for machines
-                tasks_overlapping_machines[{task_idx1, task_idx2}] = model.addVar(
-                    0.0,
-                    1.0,
-                    0.0,
-                    GRB_BINARY,
-                    "machines_overlap_for_tasks_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
-                );
-
-
-                // Force the overlapping variable to be equal to the disjunction of the above literals and store it in the map
-                model.addGenConstrOr(
-                    tasks_overlapping_machines[{task_idx1, task_idx2}],
-                    exclusion_same_machine,
-                    4, // number of literals in the above array of boolean variables
-                    "activates_if_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
-                );
-
-                // Finally constrain it to be equal to 0 (false) in the model
-                model.addConstr(
-                    tasks_overlapping_machines[{task_idx1, task_idx2}] == 0,
-                    "exclusion_same_operator_" + std::to_string(task_idx1) + "_" + std::to_string(task_idx2)
-                );
-
-
+                // Construct the variable encoding the overlap of the above three variables
+                model.addConstr(time_overlap + machine_overlap <= 2);
+                model.addConstr(time_overlap + operator_overlap <= 2);
+#endif
             }
+
         }
+
+
     }
 
-
+    // Set the assignment compatibility constraints
 
     // Set objective function
         // Declare objective function
@@ -406,6 +369,9 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
     log_stream << "Setting objective function." << std::endl;
     model.setObjective(objective, GRB_MINIMIZE);
 
+    model.write("model.mps");
+    model.write("model.lp");
+
 
 
     // Delay all upcoming tasks coming after the horizon by the job's delay that was just resolved
@@ -415,12 +381,13 @@ void resolve_lookahead(Instance& inst, Solution& sol, std::map<int, std::deque<i
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <instance_filename>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <instance_filename> <lookahead_duration>" << std::endl;
         return 1;
     }
 
     // Import instance
     std::string instance_filename = argv[1];
+    const int lookahead_duration = std::stoi(argv[2]);
     std::ofstream log_file("solve.log");
     Instance inst = import_instance(instance_filename, log_file);
 
@@ -439,7 +406,7 @@ int main(int argc, char* argv[]) {
 
     partial_initialize_time_scheduling_greedy(inst, sol, log_file);
     int time_cursor = 0;
-    const int lookahead_duration = 10;
+
     std::map<int, std::deque<int>> job_stacks;
     for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
         job_stacks[j_idx] = std::deque<int>(inst.jobs[j_idx].sequence.begin(), inst.jobs[j_idx].sequence.end());

@@ -1,7 +1,8 @@
 CXX = g++
-CXXFLAGS := -std=c++20 -Wall -Wextra -Werror
+CXXFLAGS := -std=c++20 -Wall -Wextra
 
-OPTIONAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs -fanalyzer -pedantic
+OPTIONAL_FLAGS := -Werror -fanalyzer -pedantic
+INDIVIDUAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs 
 
 GUROBI_INCLUDE = /opt/gurobi1200/linux64/include
 GUROBI_LIB = /opt/gurobi1200/linux64/lib
@@ -22,7 +23,7 @@ INSTANCES_DIR = instances
 debug: CXXFLAGS += -g3 -O0  # -g0..3 (g default), and pg is for gprof
 debug: solve
 
-build: CXXFLAGS += -O3 -DNDEBUG $(OPTIONAL_FLAGS)
+build: CXXFLAGS += -O3 -DNDEBUG
 build: solve
 
 profile: CXXFLAGS += -pg -O3
