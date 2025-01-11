@@ -47,8 +47,8 @@ utils.o: utils.cpp
 clean:
 	rm -f *.o
 
-run:	
-	./solve.o
+test:	
+	./solve.o $(INSTANCES_DIR)/tiny.json 10
 
 analyse:
-	./solve.o $(INSTANCES_DIR)/tiny.json && gprof -q ./solve.o gmon.out > analysis.txt
+	./solve.o $(INSTANCES_DIR)/tiny.json 10 && gprof -q ./solve.o gmon.out > analysis.txt

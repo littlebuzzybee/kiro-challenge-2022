@@ -10,15 +10,16 @@ struct Job {
     int release_date;
     int due_date;
     int weight;
-    std::vector<int> sequence;
+    std::vector<int> sequence; // sequence of task indexes (not ids)
 };
 
 struct Task {
     int id;
     int processing_time;
     int job_parent;
-    std::vector<int> machines;
-    std::vector<std::vector<int>> operators;
+    std::set<int> machines; // possible machine indexes
+    std::map<int, std::set<int>> compatibility; // machine -> operators
+    std::set<int> operators; // possible operator indexes
 };
 
 struct Instance {

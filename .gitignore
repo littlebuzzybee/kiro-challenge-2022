@@ -7,3 +7,5 @@ __pycache__/
 *.log
 *.mps
 *.lp
+*.svg
+*.data
