@@ -48,7 +48,7 @@ function main_strategy(
 
 
     t = 1; # Initialisation du temps
-    log_file = open(path*"/juliasolve.log", "w"); # ouverture du fichier Log
+    log_file = open(path*"/julia_solve.log", "w"); # ouverture du fichier Log
     
     # BOUCLE PRINCIPALE DE DÉCISION
     while (length(done_tasks) < nb_tasks) & (t < 100)

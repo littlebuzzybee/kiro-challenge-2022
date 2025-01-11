@@ -1,8 +1,8 @@
 using JuMP
-using Ipopt
+# using Ipopt
 using Gurobi
-using SCIP
-using KNITRO
+# using SCIP
+# using KNITRO
 
 # Import the model
 
@@ -11,5 +11,5 @@ print(model) # beware if the model is too large
 
 # Select the solver and optimize the model
 
-set_optimizer(model, SCIP.Optimizer)
+set_optimizer(model, Gurobi.Optimizer)
 optimize!(model)
