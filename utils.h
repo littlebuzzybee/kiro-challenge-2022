@@ -50,6 +50,6 @@ struct Solution {
 };
 
 nlohmann::json read_json_file(std::string);
-Instance import_instance(std::string, std::ostream& out_stream);
+Instance import_instance(std::string, std::ostream&);
 
 #endif

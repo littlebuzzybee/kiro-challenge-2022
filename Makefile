@@ -15,7 +15,7 @@ JSON_INCLUDE = nlohmann
 INCLUDES = -I$(GUROBI_INCLUDE) -I$(ORTOOLS_INCLUDE) -I$(JSON_INCLUDE)
 LIBS = -L$(GUROBI_LIB) -L$(ORTOOLS_LIB) -lgurobi_c++ -lgurobi120 -lortools
 
-SOURCES = main.cpp utils.cpp
+SOURCES = main.cpp utils.cpp solve.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 INSTANCES_DIR = instances
@@ -35,7 +35,7 @@ simple: solve
 
 
 solve: $(OBJECTS)
-	$(CXX) $(OBJECTS) -o solve.o $(CXXFLAGS) $(INCLUDES) $(LIBS)
+	$(CXX) $(OBJECTS) -o scheduler.o $(CXXFLAGS) $(INCLUDES) $(LIBS)
 
 
 main.o: main.cpp
@@ -43,6 +43,9 @@ main.o: main.cpp
 
 utils.o: utils.cpp
 	$(CXX) -c utils.cpp -o utils.o $(CXXFLAGS) $(INCLUDES)
+
+solve.o: solve.cpp
+	$(CXX) -c solve.cpp -o solve.o $(CXXFLAGS) $(INCLUDES)
 
 clean:
 	rm -f *.o
