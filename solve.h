@@ -15,28 +15,7 @@
 #include "gurobi_c++.h"
 #include "utils.h"
 
-void get_relevant_tasks(
-    Instance&,
-    Solution&,
-    int,
-    int,
-    int,
-    std::map<int, std::deque<int>>&,
-    std::vector<int>&,
-    std::set<int>&,
-    std::map<int, std::vector<int>>&
-);
 
-
-void display_lookahead_program(
-    int,
-    int,
-    std::vector<int>&,
-    std::set<int>&,
-    int,
-    std::map<int, std::vector<int>>&,
-    std::ostream&
-);
 
 void greedy_initialize_time_scheduling(
     Instance&,
@@ -46,13 +25,42 @@ void greedy_initialize_time_scheduling(
 
 
 
+
+void get_relevant_tasks(
+    Instance&,
+    Solution&,
+    int,
+    int,
+    int,
+    std::map<int, std::deque<int>>&,
+    std::vector<int>&,
+    std::vector<int>&,
+    std::map<int, std::vector<int>>&,
+    std::unordered_map<int, int>&,
+    std::ostream&
+);
+
+
+void display_lookahead_program(
+    int,
+    int,
+    std::vector<int>&,
+    std::vector<int>&,
+    int,
+    std::map<int, std::vector<int>>&,
+    std::ostream&
+);
+
+
+
+
 void set_begin_variables_and_ordering_constraints(
     Instance&,
     Solution&,
     GRBModel&,
     std::map<int, std::map<int, GRBVar>>&,
     std::map<int, std::vector<int>>&,
-    std::set<int>&,
+    std::vector<int>&,
     std::unordered_map<int, int>&,
     int
 );
@@ -61,7 +69,7 @@ void set_slack_and_penalty_variables(
     GRBModel&,
     std::map<int, GRBVar>&,
     std::map<int, GRBVar>&,
-    std::set<int>&
+    std::vector<int>&
 );
 
 
@@ -110,10 +118,19 @@ void set_workers_time_overlap_constraints(
     std::map<int, std::map<int, GRBVar>>&,
     std::map<int, std::map<int, GRBVar>>&,
     std::vector<int>&,
-    std::set<int>&,
+    std::vector<int>&,
     std::map<int, std::vector<int>>&,
     std::ostream&
 );
+
+void set_objective_function(
+    Instance&,
+    GRBModel&,
+    std::vector<int>&,
+    std::map<int, GRBLinExpr>&,
+    std::map<int, GRBVar>&,
+    std::map<int, GRBVar>&
+    );
 
 void resolve_lookahead(
     Instance&,
@@ -122,6 +139,7 @@ void resolve_lookahead(
     std::unordered_map<int, int>&,
     int,
     int,
+    double,
     std::ostream&
 );
 

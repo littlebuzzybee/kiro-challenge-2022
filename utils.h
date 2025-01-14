@@ -42,7 +42,6 @@ struct Instance {
 struct Solution {
     // time variables
     std::vector<int> begin_time_tasks;
-    std::vector<int> end_time_tasks;
     std::vector<int> completion_date_jobs;
     // choice variables
     std::vector<int> machine_choice_tasks;
