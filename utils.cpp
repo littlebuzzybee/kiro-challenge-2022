@@ -40,6 +40,72 @@ void print_sequence(std::vector<int> v, int offset, std::ostream& out_stream) {
 }
 
 
+
+void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream) {
+    // Print column headers
+    out_stream << "   ";
+    for (const auto& col : matrix.begin()->second) {
+        out_stream << std::setw(4) << col.first + 1;
+    }
+    out_stream << std::endl;
+
+    // Print rows
+    for (const auto& row : matrix) {
+        out_stream << std::setw(4) << row.first + 1 << ": ";
+        for (const auto& cell : row.second) {
+            if (cell.second == 3) {
+                out_stream << "\u00d7   ";
+            } else if (cell.second == 2) {
+                out_stream << "o   ";
+            } 
+            else if (cell.second == 1) {
+                out_stream << "m   ";
+            }
+            else {
+                out_stream << "    "; // Two spaces for proper alignment
+            }
+        }
+        out_stream << std::endl; // New line after each row
+    }
+}
+
+
+void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream) {
+    if (matrix.empty()) {
+        out_stream << "Matrix is empty.\n";
+        return;
+    }
+
+    // Determine the set of all column headers (keys of the innermost maps)
+    std::set<int> columns;
+    for (const auto& [outer_key, inner_map] : matrix) {
+        for (const auto& [inner_key, _] : inner_map) {
+            columns.insert(inner_key);
+        }
+    }
+
+    // Print the header row
+    out_stream << std::setw(4) << " "; // Leave space for row headers
+    for (int col : columns) {
+        out_stream << std::setw(4) << col;
+    }
+    out_stream << std::endl;
+
+    // Print each row
+    for (const auto& [row_key, inner_map] : matrix) {
+        out_stream << std::setw(4) << row_key; // Row header
+        for (int col : columns) {
+            auto it = inner_map.find(col);
+            if (it != inner_map.end()) {
+                out_stream << std::setw(4) << it->second; // Value in the cell
+            } else {
+                out_stream << std::setw(4) << 0; // Default to 0 if no value exists
+            }
+        }
+        out_stream << std::endl;
+    }
+}
+
 Instance import_instance(std::string filename, std::ostream& out_stream = std::cout) {
     nlohmann::json inst_descriptor = read_json_file(filename);
     

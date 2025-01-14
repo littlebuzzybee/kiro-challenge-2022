@@ -17,15 +17,6 @@
 
 
 
-void greedy_initialize_time_scheduling(
-    Instance&,
-    Solution&,
-    std::ostream&
-);
-
-
-
-
 void get_relevant_tasks(
     Instance&,
     Solution&,
@@ -36,8 +27,8 @@ void get_relevant_tasks(
     std::vector<int>&,
     std::vector<int>&,
     std::map<int, std::vector<int>>&,
-    std::unordered_map<int, int>&,
-    std::ostream&
+    std::map<int, int>&,
+    std::unordered_map<int, int>&
 );
 
 
@@ -48,6 +39,7 @@ void display_lookahead_program(
     std::vector<int>&,
     int,
     std::map<int, std::vector<int>>&,
+    std::map<int, std::deque<int>>&,
     std::ostream&
 );
 
@@ -72,19 +64,6 @@ void set_slack_and_penalty_variables(
     std::vector<int>&
 );
 
-
-void set_completion_time_and_penalty_constraints(
-    Instance&,
-    Solution&,
-    GRBModel&,
-    std::map<int, GRBVar>&,
-    std::map<int, GRBVar>&,
-    std::map<int, GRBVar>&,
-    std::map<int, GRBLinExpr>&,
-    std::map<int, std::map<int, GRBVar>>&,
-    std::vector<int>&,
-    std::map<int, std::vector<int>>&
-);
 
 void set_assignment_variables(
     Instance&,
@@ -125,6 +104,20 @@ void set_workers_time_overlap_constraints(
     std::ostream&
 );
 
+
+void set_completion_time_and_penalty_constraints(
+    Instance&,
+    GRBModel&,
+    std::map<int, GRBVar>&,
+    std::map<int, GRBVar>&,
+    std::map<int, GRBLinExpr>&,
+    std::map<int, std::map<int, GRBVar>>&,
+    std::vector<int>&,
+    std::map<int, std::vector<int>>&,
+    std::map<int, int>&
+);
+
+
 void set_objective_function(
     Instance&,
     GRBModel&,
@@ -142,6 +135,7 @@ void resolve_lookahead(
     int,
     int,
     double,
+    int,
     bool,
     bool,
     std::ostream&

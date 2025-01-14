@@ -51,7 +51,7 @@ clean:
 	rm -f *.o
 
 test:	
-	./solve.o $(INSTANCES_DIR)/tiny.json 10
+	./scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=2 --time_limit=10.0
 
 analyse:
-	./solve.o $(INSTANCES_DIR)/tiny.json 10 && gprof -q ./solve.o gmon.out > analysis.txt
+	./scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=1 --time_limit=10.0 && gprof -q ./solve.o gmon.out > analysis.txt

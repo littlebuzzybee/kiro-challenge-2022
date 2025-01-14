@@ -15,33 +15,7 @@
 
 
 
-void greedy_initialize_time_scheduling(Instance& inst,
-    Solution& sol,
-    std::ostream& log_stream
-) {
-    log_stream << "Stacking greedily tasks in time..." << std::endl;
-    for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
-        int total_task_offset = 0; // cumulative sum of all task processing times for the current job
-        log_stream << "~~~~~ Processing job " << j_idx + 1 << " ~~~~~" << std::endl;
-        for (int t_idx = 0; t_idx < (int)inst.jobs[j_idx].sequence.size(); t_idx++) {
-            int processed_task = inst.jobs[j_idx].sequence[t_idx];
 
-            sol.begin_time_tasks[processed_task] = inst.jobs[j_idx].release_date
-                + total_task_offset;
-
-            int end_time_task = inst.jobs[j_idx].release_date
-                + total_task_offset
-                + inst.tasks[processed_task].processing_time;
-
-            log_stream << "Set T" << processed_task + 1 << ": slot [b,e] = [" << sol.begin_time_tasks[processed_task] << "," << end_time_task << "]" << std::endl;
-            // update time offset with current task
-            total_task_offset += inst.tasks[processed_task].processing_time;
-        }
-        sol.completion_date_jobs[j_idx] = inst.jobs[j_idx].release_date + total_task_offset;
-        log_stream << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
-        log_stream << "Job " << j_idx << " completion date: " << sol.completion_date_jobs[j_idx] << std::endl << std::endl;
-    }
-}
 
 
 
@@ -56,14 +30,12 @@ void get_relevant_tasks(
     std::vector<int>& processed_tasks,
     std::vector<int>& processed_jobs,
     std::map<int, std::vector<int>>& processed_tasks_of_jobs,
-    std::unordered_map<int, int>& pending_task_per_job,
-    std::ostream& log_stream
+    std::map<int, int>& cumulative_remainder_time_per_job,
+    std::unordered_map<int, int>& pending_task_per_job
 ) {
     for (int job_idx = 0; job_idx < inst.nb_jobs; ++job_idx) {
-        log_stream << "~~~~~ Processing job " << job_idx + 1 << " ~~~~~" << std::endl;
         if (job_stacks[job_idx].empty() || inst.jobs[job_idx].release_date >= time_horizon) {
-            log_stream << "Job " << job_idx << " is either completely scheduled" << std::endl << "or not released yet." << std::endl;
-            log_stream << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl << std::endl;
+            cumulative_remainder_time_per_job[job_idx] = 0; // just for the record
             continue;
             // There are no tasks to schedule on the time window for this job
         }
@@ -80,17 +52,35 @@ void get_relevant_tasks(
                     + inst.tasks[pending_task].processing_time;
             }
 
-            log_stream << "Popped off: ";
+
             while (!job_stacks[job_idx].empty() && earliest_begin_time < time_horizon) {
                 int task_idx = job_stacks[job_idx].front();
                 earliest_begin_time += inst.tasks[task_idx].processing_time; // update the earliest begin time for the next task in line
                 processed_tasks_of_jobs[job_idx].emplace_back(task_idx);
                 processed_tasks.emplace_back(task_idx);
                 job_stacks[job_idx].pop_front();
-                log_stream << "T" << task_idx + 1 << "; ";
             }
-            log_stream << std::endl << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl << std::endl;
         }
+    }
+
+
+
+    for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
+
+        std::deque<int>& remaining_tasks_sequence = job_stacks[j_idx];
+
+        // Front of the deque has the lowest task indexes, i.e. the first to process in order
+
+        int total_processing_time = std::accumulate(
+            remaining_tasks_sequence.begin(),
+            remaining_tasks_sequence.end(),
+            0, // Initial value of the sum
+            [&inst](int total_sum, int t_idx) {
+                return total_sum + inst.tasks[t_idx].processing_time;
+            }
+        );
+
+        cumulative_remainder_time_per_job[j_idx] = total_processing_time;
     }
 }
 
@@ -103,13 +93,14 @@ void display_lookahead_program(
     std::vector<int>& processed_jobs,
     int nb_pending_tasks,
     std::map<int, std::vector<int>>& processed_tasks_of_jobs,
+    std::map<int, std::deque<int>>& job_stacks,
     std::ostream& log_stream
 ) {
     log_stream << "There are " << nb_processed_jobs << " jobs processed." << std::endl;
 
-    log_stream << "They comprise the following processed tasks in the lookahead: ";
+    log_stream << "They comprise the following processed tasks in the lookahead window: ";
     for (int task_idx : processed_tasks) {
-        log_stream << ";" << task_idx + 1;
+        log_stream << task_idx + 1 << "; ";
     }
     log_stream << " distributed as follows: " << std::endl << std::endl;
 
@@ -118,7 +109,8 @@ void display_lookahead_program(
         for (int task_idx : processed_tasks_of_jobs[job_idx]) {
             log_stream << "|" << task_idx + 1;
         }
-        log_stream << "|" << std::endl;
+        log_stream << "|";
+        log_stream << "   (+ " << job_stacks[job_idx].size() << " remaining)" << std::endl;
     }
     log_stream << std::endl << "There are " << nb_pending_tasks << " pending tasks in total." << std::endl;
     log_stream << "Max duration of processed tasks: " << max_duration_tasks << std::endl;
@@ -201,12 +193,12 @@ void set_begin_variables_and_ordering_constraints(
 
 void set_slack_and_penalty_variables(
     GRBModel& model,
-    std::map<int, GRBVar>& tardiness_post_slacks,
+    std::map<int, GRBVar>& tardiness_slacks,
     std::map<int, GRBVar>& unit_penalties,
     std::vector<int>& processed_jobs
 ) {
     for (int job_idx : processed_jobs) {
-        tardiness_post_slacks[job_idx] = model.addVar(
+        tardiness_slacks[job_idx] = model.addVar(
             0.0, GRB_INFINITY, 0.0, GRB_INTEGER,
             "due_date_slack_J" + std::to_string(job_idx + 1)
         );
@@ -216,50 +208,6 @@ void set_slack_and_penalty_variables(
         );
     }
 }
-
-
-void set_completion_time_and_penalty_constraints(
-    Instance& inst,
-    Solution& sol,
-    GRBModel& model,
-    std::map<int, GRBVar>& tardiness_post_slacks,
-    std::map<int, GRBVar>& unit_penalties,
-    std::map<int, GRBLinExpr>& additional_delays_jobs,
-    std::map<int, GRBLinExpr>& new_completion_dates_jobs,
-    std::map<int, std::map<int, GRBVar>>& begin_times_tasks_per_job,
-    std::vector<int>& processed_jobs,
-    std::map<int, std::vector<int>>& processed_tasks_of_jobs
-) {
-    for (int job_idx : processed_jobs) {
-        int last_task_of_job = processed_tasks_of_jobs[job_idx].back();
-
-        additional_delays_jobs[job_idx] = GRBLinExpr(begin_times_tasks_per_job[job_idx][last_task_of_job] - sol.begin_time_tasks[last_task_of_job]);
-        new_completion_dates_jobs[job_idx] = GRBLinExpr(sol.completion_date_jobs[job_idx] + additional_delays_jobs[job_idx]);
-    }
-
-
-    // Set constraint for completion time: completion_time <= due_date + slack
-    for (int job_idx : processed_jobs) {
-        model.addConstr(
-            new_completion_dates_jobs[job_idx] <= inst.jobs[job_idx].due_date + tardiness_post_slacks[job_idx],
-            "slack_deadline_J" + std::to_string(job_idx + 1)
-        );
-    }
-
-
-    // Set unit penalty constraints
-    for (int job_idx : processed_jobs) {
-        // completion_time > due_date => unit_penalty = 1
-        // https://docs.gurobi.com/projects/optimizer/en/current/reference/cpp/model.html#_CPPv4N8GRBModel21addGenConstrIndicatorE6GRBVariRK10GRBLinExprcd6string
-        model.addGenConstrIndicator(
-            unit_penalties[job_idx],
-            0, // false
-            new_completion_dates_jobs[job_idx], GRB_LESS_EQUAL, inst.jobs[job_idx].due_date,
-            "bind_unit_pen_J" + std::to_string(job_idx + 1)
-        );
-    }
-}
-
 
 
 
@@ -393,12 +341,13 @@ void set_workers_time_exclusion_constraints(
     std::vector<int>& processed_jobs,
     std::map<int, std::vector<int>>& processed_tasks_of_jobs,
     std::unordered_map<int, int>& pending_task_per_job,
-    std::ostream& log_stream = std::cout
+    std::ostream& log_stream
 ) {
 
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_machines;
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_operators;
 
+    std::map<int, std::map<int, int>> crossed_constraints_ind;
 
 
     // Iterate over all pairs of different jobs, unordered, once, to set the exclusion constraints
@@ -410,14 +359,15 @@ void set_workers_time_exclusion_constraints(
 
         for (; j_idx2_ptr != processed_jobs.end(); ++j_idx2_ptr) {
 
-            log_stream << std::endl << std::endl << "*** ...between respective tasks of J" << *j_idx1_ptr + 1 << " and J" << *j_idx2_ptr + 1 << " ***" << std::endl;
+            // log_stream << std::endl << std::endl << "*** ...between respective tasks of J" << *j_idx1_ptr + 1 << " and J" << *j_idx2_ptr + 1 << " ***" << std::endl;
+
 
             // Given a pair of jobs, iterate over all pairs of tasks (one from each job)
             // This means we consider each edge of the corresponding bipartite graph
             for (int t_idx1 : processed_tasks_of_jobs[*j_idx1_ptr]) {
 
                 for (int t_idx2 : processed_tasks_of_jobs[*j_idx2_ptr]) {
-                    log_stream << "T" << t_idx1 + 1 << "-T" << t_idx2 + 1 << "; ";
+                    // log_stream << "T" << t_idx1 + 1 << "-T" << t_idx2 + 1 << "; ";
                     // Compute temporarily the intersection of possible machines for the two tasks
                     std::vector<int> intersection_operators;
                     std::set_intersection(
@@ -432,6 +382,21 @@ void set_workers_time_exclusion_constraints(
                         inst.tasks[t_idx2].machines.begin(), inst.tasks[t_idx2].machines.end(),
                         std::back_inserter(intersection_machines)
                     );
+
+                    int cstr_type = 0;
+                    if (!intersection_operators.empty() && !intersection_machines.empty()) {
+                        cstr_type = 3; // machine & operator anti overlap constraint
+                    }
+                    else if (intersection_operators.empty() && !intersection_machines.empty()) {
+                        cstr_type = 2; // operator anti overlap constraint
+                    }
+                    else if (!intersection_operators.empty() && intersection_machines.empty()) {
+                        cstr_type = 1; // machine anti overlap constraint
+                    }
+                    else {
+                        cstr_type = 0; // no overlap constraint
+                    }
+                    crossed_constraints_ind[t_idx1][t_idx2] = cstr_type;
 
                     // Define the suffix indicator for the two tasks to set in constraint names
                     std::string task_pair_str = "T" + std::to_string(t_idx1 + 1) + "_T" + std::to_string(t_idx2 + 1);
@@ -543,14 +508,61 @@ void set_workers_time_exclusion_constraints(
                             proc_task_uses_pend_ma,
                             1,
                             begin_time_proc - end_time_pend, GRB_GREATER_EQUAL, 0,
-                            "no_pending_overlap_operator_" + task_pair_str // left
+                            "no_pending_overlap_machine_" + task_pair_str // left
                         );
                     }
                 }
             }
         }
     }
+    // log_stream << std::endl << "Crossed constraints matrix:" << std::endl;
+    // log_stream << "[\u00d7]: full overlap; [m]: machine overlap; [o]: operator overlap" << std::endl;
+    // displayMatrix(crossed_constraints_ind, log_stream);
+    // log_stream << std::endl;
 }
+
+
+void set_completion_time_and_penalty_constraints(
+    Instance& inst,
+    GRBModel& model,
+    std::map<int, GRBVar>& tardiness_slacks,
+    std::map<int, GRBVar>& unit_penalties,
+    std::map<int, GRBLinExpr>& new_completion_dates_jobs,
+    std::map<int, std::map<int, GRBVar>>& begin_times_tasks_per_job,
+    std::vector<int>& processed_jobs,
+    std::map<int, std::vector<int>>& processed_tasks_of_jobs,
+    std::map<int, int>& cumulative_remainder_time_per_job
+) {
+    for (int job_idx : processed_jobs) {
+        int last_task_of_job = processed_tasks_of_jobs[job_idx].back();
+
+        new_completion_dates_jobs[job_idx] = GRBLinExpr(begin_times_tasks_per_job[job_idx][last_task_of_job] + cumulative_remainder_time_per_job[job_idx]);
+    }
+
+
+    // Set constraint for completion time: completion_time <= due_date + slack
+    for (int job_idx : processed_jobs) {
+        model.addConstr(
+            new_completion_dates_jobs[job_idx] <= inst.jobs[job_idx].due_date + tardiness_slacks[job_idx],
+            "slack_deadline_J" + std::to_string(job_idx + 1)
+        );
+    }
+
+
+    // Set unit penalty constraints
+    for (int job_idx : processed_jobs) {
+        // completion_time > due_date => unit_penalty = 1
+        model.addGenConstrIndicator(
+            unit_penalties[job_idx],
+            0, // false
+            tardiness_slacks[job_idx], GRB_LESS_EQUAL, 0,
+            "bind_unit_pen_J" + std::to_string(job_idx + 1)
+        );
+    }
+}
+
+
+
 
 
 void set_objective_function(
@@ -558,7 +570,7 @@ void set_objective_function(
     GRBModel& model,
     std::vector<int>& processed_jobs,
     std::map<int, GRBLinExpr>& new_completion_dates_jobs,
-    std::map<int, GRBVar>& tardiness_post_slacks,
+    std::map<int, GRBVar>& tardiness_slacks,
     std::map<int, GRBVar>& unit_penalties
 ) {
     GRBLinExpr objective = 0;
@@ -566,12 +578,18 @@ void set_objective_function(
         // Set interim costs
         objective += inst.jobs[job_idx].weight * new_completion_dates_jobs[job_idx];
         // Set tardiness costs
-        objective += inst.tardiness * inst.jobs[job_idx].weight * tardiness_post_slacks[job_idx];
+        objective += inst.tardiness * inst.jobs[job_idx].weight * tardiness_slacks[job_idx];
         // Set unit penalty costs
         objective += inst.unit_penalty * inst.jobs[job_idx].weight * unit_penalties[job_idx];
     }
     model.setObjective(objective, GRB_MINIMIZE);
 }
+
+
+
+
+/* ========== MAIN FUNCTION TO ITERATE AND SOLVE ========== */
+
 
 
 
@@ -583,6 +601,7 @@ void resolve_lookahead(
     int time_cursor,
     int lookahead_duration,
     double time_limit,
+    int max_threads,
     bool write_problem_file,
     bool report_all_solutions,
     std::ostream& log_stream = std::cout
@@ -593,8 +612,10 @@ void resolve_lookahead(
 
     // Begin by identifying the tasks that are relevant in the lookahead window
     std::map<int, std::vector<int>> processed_tasks_of_jobs; // ordered set of tasks for each job
+    std::map<int, int> cumulative_remainder_time_per_job;
     std::vector<int> processed_jobs;
     std::vector<int> processed_tasks;
+
 
 
     get_relevant_tasks(
@@ -607,8 +628,8 @@ void resolve_lookahead(
         processed_tasks,
         processed_jobs,
         processed_tasks_of_jobs,
-        pending_task_per_job,
-        log_stream
+        cumulative_remainder_time_per_job,
+        pending_task_per_job
     );
 
     processed_tasks.shrink_to_fit();
@@ -638,6 +659,7 @@ void resolve_lookahead(
         processed_jobs,
         nb_pending_tasks,
         processed_tasks_of_jobs,
+        job_stacks,
         log_stream
     );
 
@@ -649,8 +671,8 @@ void resolve_lookahead(
     GRBModel model = GRBModel(env);
     model.set(GRB_StringAttr_ModelName, "Time_Scheduling_Round_" + std::to_string(1));
     model.set(GRB_IntParam_OutputFlag, 1);
-    model.set(GRB_IntParam_Threads, 5);
-    model.set(GRB_DoubleParam_TimeLimit, 60.0);
+    model.set(GRB_IntParam_Threads, max_threads);
+    model.set(GRB_DoubleParam_TimeLimit, time_limit);
 
 
     // Declare the begin times of each task and set the ordering constraints
@@ -670,38 +692,16 @@ void resolve_lookahead(
     );
 
     // Declare slacks and unit penalties variables for each job
-    std::map<int, GRBVar> tardiness_post_slacks;
+    std::map<int, GRBVar> tardiness_slacks;
     std::map<int, GRBVar> unit_penalties;
 
     log_stream << "Adding slack and penalty variables for all jobs. " << std::endl;
     set_slack_and_penalty_variables(
         model,
-        tardiness_post_slacks,
+        tardiness_slacks,
         unit_penalties,
         processed_jobs
     );
-
-
-
-    // Define the resulting completion dates variable of each processed job
-    // as the sum of its current completion date and the postponement due to task delays
-    std::map<int, GRBLinExpr> additional_delays_jobs;
-    std::map<int, GRBLinExpr> new_completion_dates_jobs;
-    log_stream << "Adding completion date variable for all jobs..." << std::endl;
-    set_completion_time_and_penalty_constraints(
-        inst,
-        sol,
-        model,
-        tardiness_post_slacks,
-        unit_penalties,
-        additional_delays_jobs,
-        new_completion_dates_jobs,
-        begin_times_tasks_per_job,
-        processed_jobs,
-        processed_tasks_of_jobs
-    );
-
-
 
     // Declare the assigned machines and operators variables for every task
     log_stream << "Declaring assignment variables..." << std::endl;
@@ -755,6 +755,26 @@ void resolve_lookahead(
         log_stream
     );
 
+    // Define the resulting completion dates variable of each processed job
+    // as the sum of its current completion date and the postponement due to task delays
+    std::map<int, GRBLinExpr> new_completion_dates_jobs;
+    log_stream << "Adding completion date variable for all jobs..." << std::endl;
+    set_completion_time_and_penalty_constraints(
+        inst,
+        model,
+        tardiness_slacks,
+        unit_penalties,
+        new_completion_dates_jobs,
+        begin_times_tasks_per_job,
+        processed_jobs,
+        processed_tasks_of_jobs,
+        cumulative_remainder_time_per_job
+    );
+
+
+
+
+
 
     // Set and declare the objective function
     log_stream << "Setting objective function..." << std::endl;
@@ -763,7 +783,7 @@ void resolve_lookahead(
         model,
         processed_jobs,
         new_completion_dates_jobs,
-        tardiness_post_slacks,
+        tardiness_slacks,
         unit_penalties
     );
 
@@ -829,7 +849,7 @@ void resolve_lookahead(
             job_stacks[parent_job].emplace_front(task_idx);
             // We traversed the tasks in reverse order to ensure that the tasks are pushed back here in the same order as they were popped off
             // Because of the precedence constraints, we know that all tasks that are pushed back here are adjacent and follow each other in the job sequence
-            log_stream << "Task T" << task_idx + 1 << " postponed." << std::endl;
+            log_stream << "Task T" << task_idx + 1 << " postponed" << std::endl;
         }
         else {
             // Task begin time falls within the window and ends within or after the time horizon, we schedule it and fix it
@@ -849,7 +869,7 @@ void resolve_lookahead(
 
 
     for (int job_idx : processed_jobs) {
-        int tardiness = tardiness_post_slacks[job_idx].get(GRB_DoubleAttr_X);
+        int tardiness = tardiness_slacks[job_idx].get(GRB_DoubleAttr_X);
         int unit_penalty = unit_penalties[job_idx].get(GRB_DoubleAttr_X);
     }
 
