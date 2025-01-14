@@ -31,6 +31,8 @@ int main(int argc, char* argv[]) {
             write_problem_file = true;
         }
     }
+    double time_limit = 60.0;
+    bool report_all_solutions = false;
 
 
     // Import instance
@@ -78,8 +80,13 @@ int main(int argc, char* argv[]) {
     // intersect_operators_.assign(inst.nb_operators, std::vector<int>(inst.nb_operators, -1)); // -1 for not yet computed
     // intersect_machines_.assign(inst.nb_machines, std::vector<int>(inst.nb_machines, -1));
 
-    double time_limit = 60.0;
-    resolve_lookahead(inst, sol, job_stacks, pending_tasks_per_job, time_cursor, lookahead_duration, time_limit, log_file);
+
+
+    resolve_lookahead(
+        inst, sol, job_stacks, pending_tasks_per_job,
+        time_cursor, lookahead_duration, time_limit, report_all_solutions,
+        write_problem_file, log_file
+    );
 
 
     // TODO: set time limit as a parameter

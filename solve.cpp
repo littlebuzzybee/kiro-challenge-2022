@@ -382,8 +382,9 @@ void set_workers_uniqueness_constraints(
 
 
 
-void set_workers_time_overlap_constraints(
+void set_workers_time_exclusion_constraints(
     Instance& inst,
+    Solution& sol,
     GRBModel& model,
     std::map<int, std::map<int, GRBVar>>& begin_times_tasks_per_job,
     std::map<int, std::map<int, GRBVar>>& assigned_operators_per_task,
@@ -391,11 +392,14 @@ void set_workers_time_overlap_constraints(
     std::vector<int>& processed_tasks,
     std::vector<int>& processed_jobs,
     std::map<int, std::vector<int>>& processed_tasks_of_jobs,
+    std::unordered_map<int, int>& pending_task_per_job,
     std::ostream& log_stream = std::cout
 ) {
 
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_machines;
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_operators;
+
+
 
     // Iterate over all pairs of different jobs, unordered, once, to set the exclusion constraints
     for (auto j_idx1_ptr = processed_jobs.begin();
@@ -411,8 +415,8 @@ void set_workers_time_overlap_constraints(
             // Given a pair of jobs, iterate over all pairs of tasks (one from each job)
             // This means we consider each edge of the corresponding bipartite graph
             for (int t_idx1 : processed_tasks_of_jobs[*j_idx1_ptr]) {
-                for (int t_idx2 : processed_tasks_of_jobs[*j_idx2_ptr]) {
 
+                for (int t_idx2 : processed_tasks_of_jobs[*j_idx2_ptr]) {
                     log_stream << "T" << t_idx1 + 1 << "-T" << t_idx2 + 1 << "; ";
                     // Compute temporarily the intersection of possible machines for the two tasks
                     std::vector<int> intersection_operators;
@@ -455,15 +459,15 @@ void set_workers_time_overlap_constraints(
                     // Two triggers TRUE means the two tasks overlap in time
                     model.addGenConstrIndicator(
                         ind1,
-                        0,              // (trigg1 = FALSE) => (end1 - begin2 <= 0)
+                        0, // (trigg1 = FALSE) => (end1 - begin2 <= 0)
                         bt1 + pt1 - bt2, GRB_LESS_EQUAL, 0,
-                        "bind_intersect_ind1_" + task_pair_str
+                        "bind_intersect_indL_" + task_pair_str // left
                     );
                     model.addGenConstrIndicator(
                         ind2,
-                        0,              // (trigg2 = FALSE) = > (end2 - begin1 <= 0)
+                        0, // (trigg2 = FALSE) = > (end2 - begin1 <= 0)
                         bt2 + pt2 - bt1, GRB_LESS_EQUAL, 0,
-                        "bind_intersect_ind2_" + task_pair_str
+                        "bind_intersect_indR_" + task_pair_str // right
                     );
                     // At this point, we have set the following implication constraint:
                     //      IF the two tasks overlap in time, THEN both indicators ind1 and ind2 are TRUE
@@ -487,6 +491,60 @@ void set_workers_time_overlap_constraints(
                         model.addQConstr(
                             ind1 * ind2 + t1_uses_ma * t2_uses_ma <= 1,
                             "bind_overlap_M" + std::to_string(ma_idx + 1) + "_" + task_pair_str);
+                    }
+                }
+            }
+
+
+
+            if (pending_task_per_job.contains(*j_idx1_ptr)) {
+                int pend_t_idx = pending_task_per_job[*j_idx1_ptr]; // get the pending task for the first job
+                for (int proc_t_idx : processed_tasks_of_jobs[*j_idx2_ptr]) { // iterate over all tasks of the second job != first job
+
+
+                    std::set<int>& proc_t_operators = inst.tasks[proc_t_idx].operators;
+                    std::set<int>& proc_t_machines = inst.tasks[proc_t_idx].machines;
+
+                    int machine_pend_task = sol.machine_choice_tasks[pend_t_idx];
+                    int operator_pend_task = sol.operator_choice_tasks[pend_t_idx];
+
+                    // If the pending task's operator is not in the possible operators for the processed task
+                    // AND the pending task's machine is not in the possible machines for the processed task
+                    // THEN we pass
+
+                    if (!proc_t_operators.contains(operator_pend_task) && !proc_t_machines.contains(machine_pend_task)) {
+                        continue;
+                    }
+
+                    // ELSE, we exclude the possibility of overlapping resources between the two tasks
+
+                    // Retrieve the begin time of the processed task and the end time of the pending task
+                    int end_time_pend = sol.begin_time_tasks[pend_t_idx] + inst.tasks[pend_t_idx].processing_time;
+                    GRBVar& begin_time_proc = begin_times_tasks_per_job[*j_idx2_ptr][proc_t_idx];
+
+                    std::string task_pair_str = "*T" + std::to_string(pend_t_idx + 1) + "_T" + std::to_string(proc_t_idx + 1);
+
+                    // Prevent the assigned operators from overlapping between the two tasks if they overlap in time
+                    if (proc_t_operators.contains(operator_pend_task)) {
+                        GRBVar& proc_task_uses_pend_op = assigned_operators_per_task[proc_t_idx][operator_pend_task];
+                        // Add the implication constraint: (proc_task uses pend_op) => (begin_processed - end_pending >= 0)
+                        model.addGenConstrIndicator(
+                            proc_task_uses_pend_op,
+                            1,
+                            begin_time_proc - end_time_pend, GRB_GREATER_EQUAL, 0,
+                            "no_pending_overlap_operator_" + task_pair_str // left
+                        );
+                    }
+
+                    // Prevent that the assigned machines overlap between the two tasks if they overlap in time
+                    if (proc_t_machines.contains(machine_pend_task)) {
+                        GRBVar& proc_task_uses_pend_ma = assigned_machines_per_task[proc_t_idx][operator_pend_task];
+                        model.addGenConstrIndicator(
+                            proc_task_uses_pend_ma,
+                            1,
+                            begin_time_proc - end_time_pend, GRB_GREATER_EQUAL, 0,
+                            "no_pending_overlap_operator_" + task_pair_str // left
+                        );
                     }
                 }
             }
@@ -525,6 +583,8 @@ void resolve_lookahead(
     int time_cursor,
     int lookahead_duration,
     double time_limit,
+    bool write_problem_file,
+    bool report_all_solutions,
     std::ostream& log_stream = std::cout
 ) {
     const int time_horizon = time_cursor + lookahead_duration;
@@ -679,14 +739,11 @@ void resolve_lookahead(
         processed_tasks
     );
 
-
-    // TODO: freeze machines and operators that are currently used by pending tasks
-
-
     // Set the assignments time overlap constraints
     log_stream << "Setting assignments time overlap constraints..." << std::endl;
-    set_workers_time_overlap_constraints(
+    set_workers_time_exclusion_constraints(
         inst,
+        sol,
         model,
         begin_times_tasks_per_job,
         assigned_operators_per_task,
@@ -694,6 +751,7 @@ void resolve_lookahead(
         processed_tasks,
         processed_jobs,
         processed_tasks_of_jobs,
+        pending_task_per_job,
         log_stream
     );
 
@@ -721,20 +779,26 @@ void resolve_lookahead(
     model.optimize();
 
 
-    /*
+    if (report_all_solutions) {
         GRBVar* vars = NULL;
-        vars = model.getVars();
+        double* values = NULL;
+        std::string* names = NULL;
 
+        int numVars = model.get(GRB_IntAttr_NumVars);
+
+        vars = model.getVars();
+        values = model.get(GRB_DoubleAttr_X, vars, numVars);
+        names = model.get(GRB_StringAttr_VarName, vars, numVars);
         // Print the values of all variables
-         for (int i = 0; i < model.get(GRB_IntAttr_NumVars); i++) {
+
+        for (int i = 0; i < numVars; i++) {
             std::cout << vars[i].get(GRB_StringAttr_VarName) << " = " << vars[i].get(GRB_DoubleAttr_X) << std::endl;
         }
-    */
+    }
 
-    // for (int job_idx : processed_jobs) {
-    //         std::cout << tardiness_post_slacks[job_idx].get(GRB_StringAttr_VarName) << " = " << tardiness_post_slacks[job_idx].get(GRB_DoubleAttr_X) << std::endl;
-    //         std::cout << unit_penalties[job_idx].get(GRB_StringAttr_VarName) << " = " << unit_penalties[job_idx].get(GRB_DoubleAttr_X) << std::endl;
-    // }
+
+
+
 
     pending_task_per_job.clear();
     for (int i = processed_tasks.size() - 1; i >= 0; --i) { // Reverse order to catch the tasks that are postponed and push them back in the same order in the job stacks
@@ -765,14 +829,14 @@ void resolve_lookahead(
             job_stacks[parent_job].emplace_front(task_idx);
             // We traversed the tasks in reverse order to ensure that the tasks are pushed back here in the same order as they were popped off
             // Because of the precedence constraints, we know that all tasks that are pushed back here are adjacent and follow each other in the job sequence
-            log_stream << "Task T" << task_idx + 1 << " was postponed." << std::endl;
+            log_stream << "Task T" << task_idx + 1 << " postponed." << std::endl;
         }
         else {
             // Task begin time falls within the window and ends within or after the time horizon, we schedule it and fix it
             sol.begin_time_tasks[task_idx] = begin_time;
             sol.machine_choice_tasks[task_idx] = machine_choice;
             sol.operator_choice_tasks[task_idx] = operator_choice;
-            log_stream << "Task T" << task_idx + 1 << " was scheduled at time " << begin_time << " on machine " << machine_choice + 1 << " and operator " << operator_choice + 1 << std::endl;
+            log_stream << "Task T" << task_idx + 1 << " scheduled at t=" << begin_time << " with M" << machine_choice + 1 << " & O" << operator_choice + 1 << std::endl;
 
             if (begin_time + inst.tasks[task_idx].processing_time > time_horizon
                 && begin_time < time_horizon) {
@@ -781,6 +845,12 @@ void resolve_lookahead(
             }
 
         }
+    }
+
+
+    for (int job_idx : processed_jobs) {
+        int tardiness = tardiness_post_slacks[job_idx].get(GRB_DoubleAttr_X);
+        int unit_penalty = unit_penalties[job_idx].get(GRB_DoubleAttr_X);
     }
 
 
