@@ -1,15 +1,18 @@
 using JuMP
 # using Ipopt
-using Gurobi
+# using Gurobi
 # using SCIP
 # using KNITRO
+using CPLEX
 
 # Import the model
 
-model = read_from_file("model.mps")
-print(model) # beware if the model is too large
+println("Importing model")
+model = read_from_file("model1.mps")
+# print(model) # beware if the model is too large
 
 # Select the solver and optimize the model
-
-set_optimizer(model, Gurobi.Optimizer)
+println("setting optimizer")
+set_optimizer(model, CPLEX.Optimizer)
+println("optimizing")
 optimize!(model)

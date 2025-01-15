@@ -627,6 +627,7 @@ void resolve_lookahead(
 
     int time_horizon{ 0 };
     int time_cursor{ 0 };
+    int round = 1;
 
     while (!all_stacks_are_empty(job_stacks)) {
         // While there are tasks to process in the lookahead window
@@ -634,6 +635,20 @@ void resolve_lookahead(
         time_horizon = time_cursor + lookahead;
         log_stream << "**********************************************************" << std::endl;
         log_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]..." << std::endl;
+
+
+
+        // Update the map of pending tasks
+        for (auto it = pending_task_per_job.begin(); it != pending_task_per_job.end();) {
+            auto& [parent_job, task_idx] = *it;
+            if (sol.begin_time_tasks[task_idx] + inst.tasks[task_idx].processing_time <= time_horizon) {
+                // The pending task has been processed in the lookahead window
+                it = pending_task_per_job.erase(it); // Erase and get the next iterator
+            }
+            else {
+                ++it; // Advance the iterator if no erasure
+            }
+        }
 
         get_relevant_tasks(
             inst,
@@ -654,7 +669,11 @@ void resolve_lookahead(
         std::sort(processed_jobs.begin(), processed_jobs.end());
 
 
-
+        if (processed_tasks.empty()) {
+            log_stream << "No tasks to process in the lookahead window. Moving to the next window." << std::endl;
+            time_cursor += lookahead;
+            continue;
+        }
 
         // Compute the maximum duration of the processed tasks
         int max_duration_tasks = *std::max_element(processed_tasks.begin(), processed_tasks.end(),
@@ -804,8 +823,8 @@ void resolve_lookahead(
 
         if (write_problem_file) {
             log_stream << "Writing model to file..." << std::endl;
-            model.write("model.mps");
-            model.write("model.lp");
+            model.write("model" + std::to_string(round) + ".mps");
+            model.write("model" + std::to_string(round) + ".lp");
         }
 
         model.optimize();
@@ -834,7 +853,6 @@ void resolve_lookahead(
 
 
         log_stream << "Decisions made by the solver on this window:" << std::endl;
-        pending_task_per_job.clear();
         for (int i = processed_tasks.size() - 1; i >= 0; --i) {
             // Reverse order to catch the tasks that are postponed and push them back in the same order in the job stacks
             int task_idx = processed_tasks[i];
@@ -877,7 +895,7 @@ void resolve_lookahead(
                     && begin_time < time_horizon) {
                     // Task begin time falls within the window but ends after the window span, we additionally mark it as pending for the next window to optimize given the added constraint for concomitant jobs' tasks
                     pending_task_per_job[parent_job] = task_idx;
-                    log_stream << " (pending)";
+                    log_stream << " (pending in subsequent window)";
                 }
                 log_stream << std::endl;
 
@@ -898,6 +916,7 @@ void resolve_lookahead(
             task_list.clear();
         }
         time_cursor += lookahead;
+        round++;
     }
 
 }
