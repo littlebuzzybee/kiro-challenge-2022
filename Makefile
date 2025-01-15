@@ -13,28 +13,28 @@ ORTOOLS_LIB = /opt/or-tools_v9.11.4210/lib
 JSON_INCLUDE = nlohmann
 
 INCLUDES = -I$(GUROBI_INCLUDE) -I$(ORTOOLS_INCLUDE) -I$(JSON_INCLUDE)
-LIBS = -L$(GUROBI_LIB) -L$(ORTOOLS_LIB) -lgurobi_c++ -lgurobi120 -lortools
+LIBS = -L$(GUROBI_LIB) -L$(ORTOOLS_LIB) -lgurobi_c++ -lgurobi120 -lortools -ltbb -lpthread -lstdc++fs
 
-SOURCES = main.cpp utils.cpp solve.cpp
+SOURCES = utils.cpp solve.cpp main.cpp 
 OBJECTS = $(SOURCES:.cpp=.o)
 
 INSTANCES_DIR = instances
 
 debug: CXXFLAGS += -g3 -O0  # -g0..3 (g default), and pg is for gprof
-debug: solve
+debug: scheduler
 
 build: CXXFLAGS += -O3 -DNDEBUG
-build: solve
+build: scheduler
 
 profile: CXXFLAGS += -pg -O3
-profile: solve
+profile: scheduler
 
 # simple rule to build the program
 simple: CXXFLAGS += -Os
-simple: solve
+simple: scheduler
 
 
-solve: $(OBJECTS)
+scheduler: $(OBJECTS)
 	$(CXX) $(OBJECTS) -o scheduler.o $(CXXFLAGS) $(INCLUDES) $(LIBS)
 
 
