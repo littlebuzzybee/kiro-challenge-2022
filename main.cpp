@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
 
 
 
-    int time_cursor = 0;
+
 
 
 
@@ -138,9 +138,22 @@ int main(int argc, char* argv[]) {
 
     resolve_lookahead(
         inst, sol, job_stacks, pending_tasks_per_job,
-        time_cursor, lookahead_duration, time_limit, max_threads, report_all_solutions,
+        lookahead_duration, time_limit, max_threads, report_all_solutions,
         write_problem_file, log_file
     );
+
+
+    // Now display all decisions in the solution
+    log_file << "Solution details:" << std::endl;
+    log_file << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << std::endl;
+    for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
+        log_file << "T" << t_idx + 1
+                 << std::setw(8) << sol.begin_time_tasks[t_idx]
+                 << std::setw(10) << "M" << sol.machine_choice_tasks[t_idx] + 1
+                 << std::setw(10) << "O" << sol.operator_choice_tasks[t_idx] + 1
+                 << std::endl;
+    }
+
 
 
     // TODO: set time limit as a parameter

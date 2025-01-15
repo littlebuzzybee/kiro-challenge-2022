@@ -22,7 +22,6 @@ void get_relevant_tasks(
     Solution&,
     int,
     int,
-    int,
     std::map<int, std::deque<int>>&,
     std::vector<int>&,
     std::vector<int>&,
@@ -34,12 +33,11 @@ void get_relevant_tasks(
 
 void display_lookahead_program(
     int,
-    int,
     std::vector<int>&,
     std::vector<int>&,
-    int,
     std::map<int, std::vector<int>>&,
     std::map<int, std::deque<int>>&,
+    std::unordered_map<int, int>&,
     std::ostream&
 );
 
@@ -132,7 +130,6 @@ void resolve_lookahead(
     Solution&,
     std::map<int, std::deque<int>>,
     std::unordered_map<int, int>&,
-    int,
     int,
     double,
     int,

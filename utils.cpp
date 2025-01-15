@@ -3,6 +3,7 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <deque>
 #include <fstream>
 #include <cstdlib>
 #include "utils.h"
@@ -197,4 +198,14 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
 
 
     return inst_object;
+}
+
+
+bool all_stacks_are_empty(const std::map<int, std::deque<int>>& stacks) {
+    for (const auto& pair : stacks) {
+        if (!pair.second.empty()) {
+            return false;
+        }
+    }
+    return true;
 }

@@ -52,8 +52,7 @@ nlohmann::json read_json_file(std::string);
 Instance import_instance(std::string, std::ostream&);
 void print_set(std::set<int>, int, std::ostream&);
 void print_sequence(std::vector<int>, int, std::ostream&);
-void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream);
-void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream);
-
-
+void display_cstr_matrix(std::map<int, std::map<int, int>>&, std::ostream&);
+void displayMatrix(const std::map<int, std::map<int, int>>&, std::ostream&);
+bool all_stacks_are_empty(const std::map<int, std::deque<int>>&);
 #endif
