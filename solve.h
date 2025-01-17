@@ -125,10 +125,32 @@ void set_objective_function(
     std::map<int, GRBVar>&
     );
 
+
+
+void greedy_solve_lookahead(
+    Instance&,
+    Solution&,
+    int,
+    std::map<int, std::deque<int>>,
+    std::unordered_map<int, int>&
+);
+
+void warmup_solution(
+    Instance&,
+    Solution&,
+    std::vector<int>,
+    std::map<int, std::map<int, GRBVar>>,
+    std::map<int, std::map<int, GRBVar>>,
+    std::map<int, std::map<int, GRBVar>>,
+    std::ostream&
+);
+
+
+
 void resolve_lookahead(
     Instance&,
     Solution&,
-    std::map<int, std::deque<int>>,
+    std::map<int, std::deque<int>>&,
     std::unordered_map<int, int>&,
     int,
     double,

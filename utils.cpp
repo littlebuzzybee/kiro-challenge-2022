@@ -148,7 +148,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
         }
 
         // Commit log task details
-        out_stream << "=== Imported task " << task_object.id << " ===" << std::endl;
+        out_stream << "=== Imported task T" << task_object.id << " ===" << std::endl;
         out_stream << "* processing time: " << task_object.processing_time << std::endl;
         out_stream << "* possible supports: " << std::endl;
         
@@ -183,7 +183,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
         }
         
         // Commit log job details
-        out_stream << "=== Imported job " << job_object.id << " ===" << std::endl;
+        out_stream << "=== Imported job J" << job_object.id << " ===" << std::endl;
         out_stream << "* release date: " << job_object.release_date << std::endl;
         out_stream << "* due date: " << job_object.due_date << std::endl;
         out_stream << "* weight: " << job_object.weight << std::endl;

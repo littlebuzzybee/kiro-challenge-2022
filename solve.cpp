@@ -40,7 +40,7 @@ void get_relevant_tasks(
         else {
             // Only the tasks that are fully comprised in the time window are considered.
             // Those which started before the time window but end in the time window are considered processed, fixed and pending and would not benefit the problem
-            // by being postponed again. Theirs implications are taken into account by the pending_tasks set and not recomputed here.
+            // by being postponed again. Their implications are taken into account by the pending_tasks set and not recomputed here.
             int earliest_begin_time = time_cursor;
             if (pending_task_per_job.contains(job_idx)) {
                 int pending_task = pending_task_per_job[job_idx];
@@ -98,7 +98,6 @@ void display_lookahead_program(
     log_stream << " distributed as follows: " << std::endl << std::endl;
 
     for (int job_idx : processed_jobs) {
-        int stack_length = job_stacks[job_idx].size();
         log_stream << "J" << job_idx + 1 << " entails " << processed_tasks_of_jobs[job_idx].size() << " tasks ordered as:" << std::setw(2);
         for (int task_idx : processed_tasks_of_jobs[job_idx]) {
             log_stream << "|" << task_idx + 1;
@@ -142,9 +141,9 @@ void set_begin_variables_and_ordering_constraints(
         for (int i = 0; i < int(processed_tasks_of_jobs[job_idx].size()); i++) {
             int task_idx = processed_tasks_of_jobs[job_idx][i];
 
+            // If this is the first task of the job being optimized in the window:
             if (task_idx == processed_tasks_of_jobs[job_idx].front()) {
-                // If this is the first task of the job being optimized in the window
-                if (pending_task_per_job.contains(job_idx)) {
+                if (pending_task_per_job.contains(job_idx)) { // look for the job index (key) in the map
                     // If there is a pending task for this job overlapping the window's beginning,
                     // its end time is greater than the beginning of the window,
                     // so we set instead the beginning of the current task in loop after the end of the pending task at the soonest
@@ -160,8 +159,9 @@ void set_begin_variables_and_ordering_constraints(
                         "earliest_begin_T" + std::to_string(task_idx + 1) // EST = earliest start time
                     );
                 }
+
+                // Else there is no pending task for this job overlapping the window's beginning:
                 else {
-                    // Else there is no pending task for this job overlapping the window's beginning,
                     // so we set the lower bound of the beginning of the task at the time cursor posution (beginning of the window)
                     model.addConstr(
                         GRBLinExpr(time_cursor),
@@ -596,23 +596,175 @@ void set_objective_function(
 
 
 
+void greedy_solve_lookahead(
+    Instance& inst,
+    Solution& sol,
+    int time_cursor,
+    std::map<int, std::deque<int>>& job_stacks,
+    std::unordered_map<int, int>& pending_task_per_job,
+    std::ostream& log_stream
+) {
+
+    // Report the contents of the stacks
+    log_stream << "Job stacks at time " << time_cursor << ":" << std::endl;
+    for (auto& [j_idx, task_stack] : job_stacks) {
+        log_stream << "J" << j_idx + 1 << ": ";
+        for (int t_idx : task_stack) {
+            log_stream << "T" << t_idx + 1 << " ";
+        }
+        log_stream << std::endl;
+    }
+
+    std::set<int> available_machines;
+    std::set<int> available_operators;
+
+    // Create a pool of resources
+    for (int m_idx = 0; m_idx < inst.nb_machines; ++m_idx) {
+        available_machines.insert(m_idx);
+    }
+    for (int o_idx = 0; o_idx < inst.nb_operators; ++o_idx) {
+        available_operators.insert(o_idx);
+    }
+
+    // Create data structures for the release of resources by key time position
+    std::map<int, std::set<int>> release_calendar_machines;
+    std::map<int, std::set<int>> release_calendar_operators;
+
+    // Create a data structure to enforce the precedence
+    std::map<int, int> next_time_persue_job;
+    for (int j_idx = 0; j_idx < inst.nb_jobs; ++j_idx) {
+        next_time_persue_job[j_idx] = time_cursor;
+    }
+
+    // Remove resources currently used by pending tasks
+    for (auto it = pending_task_per_job.begin(); it != pending_task_per_job.end();) {
+        auto& [parent_job, pend_task_idx] = *it;
+        available_machines.erase(sol.machine_choice_tasks[pend_task_idx]);
+        available_operators.erase(sol.operator_choice_tasks[pend_task_idx]);
+        int end_of_pending_task = sol.begin_time_tasks[pend_task_idx] + inst.tasks[pend_task_idx].processing_time;
+        assert(end_of_pending_task > time_cursor);
+
+        release_calendar_machines[end_of_pending_task].insert(sol.machine_choice_tasks[pend_task_idx]);
+        release_calendar_operators[end_of_pending_task].insert(sol.operator_choice_tasks[pend_task_idx]);
+
+        next_time_persue_job[parent_job] = end_of_pending_task;
+    }
+
+    int time_pos{ time_cursor };
 
 
+    while (!all_stacks_are_empty(job_stacks)) { // && time_pos < time_horizon
+
+        for (auto& [j_idx, task_stack] : job_stacks) {
+            // Heuristic: iterate through jobs in order at each time step and
+            // assign tasks and resources one at a time
+
+            // First release the resources that are no longer used
+            for (int m_idx : release_calendar_machines[time_pos]) {
+                available_machines.insert(m_idx);
+            }
+            for (int o_idx : release_calendar_operators[time_pos]) {
+                available_operators.insert(o_idx);
+            }
 
 
+            // Process the first task in line for the job if it exists and if the processsing time of its predecessor is over
+            if (task_stack.empty() || time_pos < next_time_persue_job[j_idx]) {
+                continue;
+            }
+            int t_idx = task_stack.front();
+
+            if (available_machines.empty() || available_operators.empty()) {
+                continue;
+            }
+
+            // Look for the first available machine and operator available for that task
+            // std::set<int> authorized_machines = inst.tasks[t_idx].machines;
+            // std::set<int> authorized_operators = inst.tasks[t_idx].operators;
+
+            std::vector<int> possible_machines;
+            std::set_intersection(
+                available_machines.begin(), available_machines.end(),
+                inst.tasks[t_idx].machines.begin(), inst.tasks[t_idx].machines.end(),
+                std::back_inserter(possible_machines)
+            );
+
+            std::vector<int> possible_operators;
+            std::set_intersection(
+                available_operators.begin(), available_operators.end(),
+                inst.tasks[t_idx].operators.begin(), inst.tasks[t_idx].operators.end(),
+                std::back_inserter(possible_operators)
+            );
+
+
+            if (possible_machines.empty() || possible_operators.empty()) {
+                continue;
+            }
+
+            // Greedily assign the first available machine and operator to the task
+            int chosen_machine = possible_machines.front(); // heuristic: take the first available
+            int chosen_operator = possible_operators.front(); // heuristic: take the first available
+            // SOLVE THE COMPATIBILITY CONSTRAINTS HERE
+
+            // Assign the workers to the task
+            sol.machine_choice_tasks[t_idx] = chosen_machine;
+            sol.operator_choice_tasks[t_idx] = chosen_operator;
+            // Schedule the task
+            sol.begin_time_tasks[t_idx] = time_pos;
+            // Prevent the subsequent assignment of any other task of the same job before the end of the current task
+            next_time_persue_job[j_idx] = time_pos + inst.tasks[t_idx].processing_time;
+            available_machines.erase(chosen_machine);
+            available_operators.erase(chosen_operator);
+            // Update the release calendar for the chosen machine and operator
+            release_calendar_machines[time_pos + inst.tasks[t_idx].processing_time].insert(chosen_machine);
+            release_calendar_operators[time_pos + inst.tasks[t_idx].processing_time].insert(chosen_operator);
+            // Remove the task from the stack
+            task_stack.pop_front();
+            log_stream << "Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << " at time " << time_pos << std::endl;
+
+        }
+        time_pos++;
+    }
+}
+
+
+void warmup_solution(
+    Instance& inst,
+    Solution& sol,
+    std::vector<int> processed_tasks,
+    std::map<int, std::map<int, GRBVar>> assigned_operators_per_task,
+    std::map<int, std::map<int, GRBVar>> assigned_machines_per_task,
+    std::map<int, std::map<int, GRBVar>> begin_times_tasks_per_job
+) {
+    for (auto& t_idx : processed_tasks) {
+        // Preset the start time
+        int default_start_time = sol.begin_time_tasks[t_idx];
+        GRBVar& start_time_task = begin_times_tasks_per_job[inst.tasks[t_idx].job_parent][t_idx];
+        start_time_task.set(GRB_DoubleAttr_Start, double(default_start_time));
+
+        // Preset the machine and operator assignments
+        int default_machine = sol.machine_choice_tasks[t_idx];
+        GRBVar& machine_assignment = assigned_machines_per_task[t_idx][default_machine];
+        machine_assignment.set(GRB_DoubleAttr_Start, double(1.0));
+
+        int default_operator = sol.operator_choice_tasks[t_idx];
+        GRBVar& operator_assignment = assigned_operators_per_task[t_idx][default_operator];
+        operator_assignment.set(GRB_DoubleAttr_Start, double(1.0));
+    }
+}
 
 
 void resolve_lookahead(
     Instance& inst,
     Solution& sol,
-    std::map<int, std::deque<int>> job_stacks,
+    std::map<int, std::deque<int>>& job_stacks,
     std::unordered_map<int, int>& pending_task_per_job,
     int lookahead,
     double time_limit,
     int max_threads,
     bool write_problem_file,
     bool report_all_solutions,
-    std::ostream& log_stream = std::cout
+    std::ostream& log_stream
 ) {
 
 
@@ -675,6 +827,8 @@ void resolve_lookahead(
             continue;
         }
 
+
+
         // Compute the maximum duration of the processed tasks
         int max_duration_tasks = *std::max_element(processed_tasks.begin(), processed_tasks.end(),
             [&inst](int t1, int t2) {
@@ -692,6 +846,32 @@ void resolve_lookahead(
             log_stream
         );
 
+
+        std::map<int, std::deque<int>> j_s{};
+        for (int j_idx : processed_jobs) {
+            for (int t_idx : processed_tasks_of_jobs[j_idx]) {
+                j_s[j_idx].push_back(t_idx);
+            }
+        }
+        /*
+                auto j_s = job_stacks;
+                for (int j_idx : processed_jobs) {
+                    j_s[j_idx].clear();
+                    for (int t_idx : processed_tasks_of_jobs[j_idx]) {
+                        j_s[j_idx].push_back(t_idx);
+                    }
+                } */
+                // Warm up the solution with the greedy solution
+        log_stream << "Computing a greedy partial solution to warm up the model..." << std::endl;
+        greedy_solve_lookahead(
+            inst,
+            sol,
+            time_cursor,
+            j_s,
+            pending_task_per_job,
+            log_stream
+        );
+
         // Initialize Gurobi environment and model
         log_stream << "Initializing Gurobi environment and model..." << std::endl;
         GRBEnv env = GRBEnv(true);
@@ -702,11 +882,11 @@ void resolve_lookahead(
         model.set(GRB_IntParam_OutputFlag, 1);
         model.set(GRB_IntParam_Threads, max_threads);
         model.set(GRB_DoubleParam_TimeLimit, time_limit);
+        model.set(GRB_IntParam_MIPFocus, 3);
 
 
         // Declare the begin times of each task and set the ordering constraints
         std::map<int, std::map<int, GRBVar>> begin_times_tasks_per_job;
-
         log_stream << "Declaring scheduling variables and constraints for processed job..." << std::endl;
 
         set_begin_variables_and_ordering_constraints(
@@ -745,6 +925,17 @@ void resolve_lookahead(
             assigned_operators_per_task,
             assigned_machines_per_task,
             processed_tasks
+        );
+
+
+        // Warm up the solution with the greedy search's results
+        warmup_solution(
+            inst,
+            sol,
+            processed_tasks,
+            assigned_operators_per_task,
+            assigned_machines_per_task,
+            begin_times_tasks_per_job
         );
 
 
