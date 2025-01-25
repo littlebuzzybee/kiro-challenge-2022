@@ -689,21 +689,36 @@ void greedy_solve_lookahead(
                 std::back_inserter(possible_machines)
             );
 
-            std::vector<int> possible_operators;
-            std::set_intersection(
-                available_operators.begin(), available_operators.end(),
-                inst.tasks[t_idx].operators.begin(), inst.tasks[t_idx].operators.end(),
-                std::back_inserter(possible_operators)
-            );
-
-
-            if (possible_machines.empty() || possible_operators.empty()) {
+            if (possible_machines.empty()) {
                 continue;
             }
 
-            // Greedily assign the first available machine and operator to the task
-            int chosen_machine = possible_machines.front(); // heuristic: take the first available
-            int chosen_operator = possible_operators.front(); // heuristic: take the first available
+            int chosen_machine{ -1 };
+            int chosen_operator{ -1 };
+            std::vector<int> possible_operators;
+
+            for (int m_idx : possible_machines) {
+                possible_operators.clear();
+                std::set_intersection(
+                    available_operators.begin(), available_operators.end(),
+                    inst.tasks[t_idx].operators.begin(), inst.tasks[t_idx].operators.end(),
+                    std::back_inserter(possible_operators)
+                );
+                if (!possible_operators.empty()) {
+                    // Greedily assign the first compatible pair to the task
+                    chosen_operator = possible_operators.front();
+                    chosen_machine = m_idx;
+                    break;
+                }
+                else {
+                    continue;
+                }
+            }
+
+            if (chosen_machine == -1 || chosen_operator == -1) {
+                continue;
+            }
+
             // SOLVE THE COMPATIBILITY CONSTRAINTS HERE
 
             // Assign the workers to the task
