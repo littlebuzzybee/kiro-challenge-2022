@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS := -std=c++20 -Wall -Wextra
+CXXFLAGS := -std=c++20 -Wall -Wextra -march=native
 
 OPTIONAL_FLAGS := -Werror -fanalyzer -pedantic
 INDIVIDUAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs 
@@ -10,48 +10,55 @@ GUROBI_LIB = /opt/gurobi1200/linux64/lib
 ORTOOLS_INCLUDE = /opt/or-tools_v9.11.4210/include
 ORTOOLS_LIB = /opt/or-tools_v9.11.4210/lib
 
-JSON_INCLUDE = nlohmann
+JSON_INCLUDE = ./nlohmann
 
 INCLUDES = -I$(GUROBI_INCLUDE) -I$(ORTOOLS_INCLUDE) -I$(JSON_INCLUDE)
 LIBS = -L$(GUROBI_LIB) -L$(ORTOOLS_LIB) -lgurobi_c++ -lgurobi120 -lortools -ltbb -lpthread -lstdc++fs
 
-SOURCES = utils.cpp solve.cpp main.cpp 
-OBJECTS = $(SOURCES:.cpp=.o)
 
-INSTANCES_DIR = instances
 
-debug: CXXFLAGS += -g3 -O0  # -g0..3 (g default), and pg is for gprof
+
+# a rule for building the program with full debug information; -g0..3 (g default), and pg is for gprof
+debug: CXXFLAGS += -g3 -O0
 debug: scheduler
 
+# a rule for building the program fully optimized and release it
 build: CXXFLAGS += -O3 -DNDEBUG
 build: scheduler
 
+# a rule for profiling the program
 profile: CXXFLAGS += -pg -O3
 profile: scheduler
 
-# simple rule to build the program
+# simple rule to build the program fast
 simple: CXXFLAGS += -Os
 simple: scheduler
 
 
+SRC_DIR = cpp_solver
+BIN_DIR = $(SRC_DIR)/objects
+
+SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve.cpp $(SRC_DIR)/main.cpp 
+OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
+
+INSTANCES_DIR = instances
+PROFILING_DIR = profiling
+
 scheduler: $(OBJECTS)
-	$(CXX) $(OBJECTS) -o scheduler.o $(CXXFLAGS) $(INCLUDES) $(LIBS)
+	$(CXX) $(OBJECTS) -o $(BIN_DIR)/scheduler.o $(CXXFLAGS) $(INCLUDES) $(LIBS)
 
-
-main.o: main.cpp
-	$(CXX) -c main.cpp -o main.o $(CXXFLAGS) $(INCLUDES)
-
-utils.o: utils.cpp
-	$(CXX) -c utils.cpp -o utils.o $(CXXFLAGS) $(INCLUDES)
-
-solve.o: solve.cpp
-	$(CXX) -c solve.cpp -o solve.o $(CXXFLAGS) $(INCLUDES)
+$(BIN_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDES)
 
 clean:
-	rm -f *.o
+	rm -f $(BIN_DIR)/*.o
 
 test:	
-	./scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=2 --time_limit=10.0
+	$(BIN_DIR)/scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=4 --time_limit=10.0
 
 analyse:
-	./scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=1 --time_limit=10.0 && gprof -q ./solve.o gmon.out > analysis.txt
+	$(BIN_DIR)/scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=1 --time_limit=10.0
+	gprof $(BIN_DIR)/scheduler.o | ./gprof2dot.py | dot -Tpdf -o $(PROFILING_DIR)/output.pdf
+
+gprof:
+	$(BIN_DIR)/scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=1 --time_limit=10.0 && gprof -q $(BIN_DIR)/scheduler.o gmon.out > $(PROFILING_DIR)/analysis.txt

@@ -2,7 +2,7 @@
 #define UTILS_H
 
 #include <iostream>
-#include "nlohmann/json.hpp"
+#include "json.hpp"
 
 
 struct Job {

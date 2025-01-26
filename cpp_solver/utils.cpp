@@ -7,7 +7,7 @@
 #include <fstream>
 #include <cstdlib>
 #include "utils.h"
-#include "nlohmann/json.hpp"
+#include "json.hpp"
 
 
 nlohmann::json read_json_file(std::string filename) {

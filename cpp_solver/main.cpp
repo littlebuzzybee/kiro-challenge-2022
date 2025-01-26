@@ -14,7 +14,7 @@
 #include "gurobi_c++.h"
 #include "utils.h"
 #include "solve.h"
-#include "nlohmann/json.hpp"
+#include "json.hpp"
 
 
 
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
     }
 
 
-    std::ofstream log_file("solve.log");
+    std::ofstream log_file("./solve.log");
     Instance inst = import_instance(instance_filename, log_file);
 
     std::map<int, std::deque<int>> job_stacks;
