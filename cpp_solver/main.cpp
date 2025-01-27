@@ -36,43 +36,52 @@ int main(int argc, char* argv[]) {
 
     double time_limit = 30.0;
     int lookahead_duration = 5;
-    bool report_all_solutions = false;
+    bool report_all_decisions = false;
     int max_threads = 3;
     bool write_problem_file = false;
+    bool solve_greedy = false;
+
 
     for (int i = 2; i < argc; i++) {
         std::string arg = argv[i];
         if (arg.find("--gurobi_threads=") == 0) {
             std::string value = arg.substr(17);
             max_threads = std::stoi(value);
-            std::cout << "Gurobi threads set to " << max_threads << "." << std::endl;
+            assert(max_threads > 0);
+            std::cout << "Gurobi threads set to " << max_threads << std::endl;
         }
         if (arg.find("--time_limit=") == 0) {
             std::string value = arg.substr(13);
             time_limit = std::stod(value);
-            std::cout << "Time limit set to " << time_limit << " seconds." << std::endl;
+            assert(time_limit > 0);
+            std::cout << "Time limit set to " << time_limit << " seconds" << std::endl;
         }
         if (arg.find("--lookahead=") == 0) {
             std::string value = arg.substr(12);
             lookahead_duration = std::stoi(value);
-            std::cout << "Lookahead duration set to " << lookahead_duration << " time units." << std::endl;
+            assert(lookahead_duration > 0);
+            std::cout << "Lookahead duration set to " << lookahead_duration << " time units" << std::endl;
         }
         if (arg.find("--write_problem_file") == 0) {
             write_problem_file = true;
-            std::cout << "Problem files will be written." << std::endl;
+            std::cout << "Problem files will be written" << std::endl;
+        }
+        if (arg.find("--report_all_decisions") == 0) {
+            report_all_decisions = true;
+            std::cout << "All decisions will be reported" << std::endl;
+        }
+        if (arg.find("--solve_greedy") == 0) {
+            solve_greedy = true;
+            std::cout << "Greedy solution will be computed" << std::endl;
         }
     }
 
 
-    if (lookahead_duration <= 0) {
-        std::cerr << "Error: lookahead_duration must be greater than 0." << std::endl;
-        return 1;
-    }
 
-
-    std::ofstream log_file("./solve.log");
+    std::ofstream log_file("./cpp_solve.log");
     Instance inst = import_instance(instance_filename, log_file);
 
+    // Fill the jobs stacks with the tasks
     std::map<int, std::deque<int>> job_stacks;
     std::vector<int> total_time_per_job(inst.nb_jobs, 0);
     for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
@@ -104,9 +113,6 @@ int main(int argc, char* argv[]) {
     }
 
 
-    // Begin solving procedure
-    log_file << "Beginning solving procedure with lookahead duration " << lookahead_duration << "..." << std::endl;
-
     Solution sol;
     // Initialize the solution's vectors
     // time variables
@@ -119,34 +125,30 @@ int main(int argc, char* argv[]) {
 
 
 
-
-
-
-
     // Declare the set of pending tasks (should be a small set of indices between each iteration since tasks durations are quite limited in comparison to the lookahead duration)
     std::unordered_map<int, int> pending_tasks_per_job{};
 
-    // Declare and initialize the indicators of resource pool intersections for operators and machines
-    // std::vector<std::vector<int>> intersect_operators_; // binary indicator if non-empty intersection
-    // std::map<std::pair<int, int>, std::set<int>> intersect_operators; // actual intersection
 
-    // std::vector<std::vector<int>> intersect_machines_;
-    // std::map<std::pair<int, int>, std::set<int>> intersect_machines;
-
-    // Initialize the integer indicators
-    // intersect_operators_.assign(inst.nb_operators, std::vector<int>(inst.nb_operators, -1)); // -1 for not yet computed
-    // intersect_machines_.assign(inst.nb_machines, std::vector<int>(inst.nb_machines, -1));
-
-
-
-    resolve_lookahead(
-        inst, sol, job_stacks, pending_tasks_per_job,
-        lookahead_duration, time_limit, max_threads, write_problem_file, report_all_solutions, log_file
-    );
+    if (solve_greedy) {
+        log_file << "Beginning solving procedure with heuristics..." << std::endl;
+        resolve_simple(
+            inst,
+            sol,
+            job_stacks,
+            log_file
+        );
+    }
+    else {
+        log_file << "Beginning solving procedure with lookahead duration " << lookahead_duration << "..." << std::endl;
+        resolve_lookahead(
+            inst, sol, job_stacks, pending_tasks_per_job,
+            lookahead_duration, time_limit, max_threads, write_problem_file, report_all_decisions, log_file
+        );
+    }
 
 
     // Now display all decisions in the solution
-    log_file << "Solution details:" << std::endl;
+    log_file << "===== Final Solution Decisions: =====" << std::endl;
     log_file << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << std::endl;
     for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
         log_file << "T" << t_idx + 1
@@ -157,10 +159,6 @@ int main(int argc, char* argv[]) {
     }
 
 
-
-    // TODO: set time limit as a parameter
-    // Implement Warm start
-    // Set the log stream as a parameter
     log_file.close();
     return 0;
 }

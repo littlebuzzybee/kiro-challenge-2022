@@ -14,7 +14,7 @@
 
 
 
-
+#define QUADRA 0
 
 
 
@@ -110,7 +110,7 @@ void display_lookahead_program(
         log_stream << "T" << t_idx + 1 << " (J" << j_idx + 1 << ");  ";
     }
     log_stream << std::endl;
-    log_stream << "Max duration of processed tasks: " << max_duration_tasks << std::endl;
+    log_stream << "Max duration of processed tasks: " << max_duration_tasks << std::endl << std::endl;
 }
 
 
@@ -242,7 +242,7 @@ void set_assignment_variables(
 
 
 
-void set_workers_compatibility_constraints(
+void set_workers_exclusion_constraints(
     Instance& inst,
     GRBModel& model,
     std::map<int, std::map<int, GRBVar>>& assigned_operators_per_task,
@@ -280,7 +280,7 @@ void set_workers_compatibility_constraints(
             nb_terms
         );
 
-        model.addQConstr(cross_compat <= 1, "compatibility_T" + std::to_string(task_idx + 1));
+        model.addQConstr(cross_compat <= 1, "workers_exclusion_T" + std::to_string(task_idx + 1));
     }
 }
 
@@ -321,7 +321,7 @@ void set_workers_uniqueness_constraints(
         // Exactly one machine and one operator can be assigned to a task: the sum of the assignment variables is 1
         model.addConstr(sum_of_machines == 1, "one_machine_only_T" + std::to_string(task_idx + 1));
         model.addConstr(sum_of_operators == 1, "one_operator_only_T" + std::to_string(task_idx + 1));
-        // The equality constraint forces to address each task assignment and leav no orphan task in the middle of a job sequence.
+        // The equality constraint forces to address each task assignment and leave no orphan task in the middle of a job sequence.
         // In the worst case, the task will be postponed by a significant delay and fall outside the window, in which case it will be reoptimized in the next lookahead window.
     }
 }
@@ -338,14 +338,12 @@ void set_workers_time_exclusion_constraints(
     std::vector<int>& processed_tasks,
     std::vector<int>& processed_jobs,
     std::map<int, std::vector<int>>& processed_tasks_of_jobs,
-    std::unordered_map<int, int>& pending_task_per_job,
-    std::ostream& log_stream
+    std::unordered_map<int, int>& pending_task_per_job
 ) {
 
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_machines;
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_operators;
 
-    std::map<int, std::map<int, int>> crossed_constraints_ind;
 
 
     // Iterate over all pairs of different jobs, unordered, once, to set the exclusion constraints
@@ -379,21 +377,6 @@ void set_workers_time_exclusion_constraints(
                         inst.tasks[t_idx2].machines.begin(), inst.tasks[t_idx2].machines.end(),
                         std::back_inserter(intersection_machines)
                     );
-
-                    int cstr_type = 0;
-                    if (!intersection_operators.empty() && !intersection_machines.empty()) {
-                        cstr_type = 3; // machine & operator anti overlap constraint
-                    }
-                    else if (intersection_operators.empty() && !intersection_machines.empty()) {
-                        cstr_type = 2; // operator anti overlap constraint
-                    }
-                    else if (!intersection_operators.empty() && intersection_machines.empty()) {
-                        cstr_type = 1; // machine anti overlap constraint
-                    }
-                    else {
-                        cstr_type = 0; // no overlap constraint
-                    }
-                    crossed_constraints_ind[t_idx1][t_idx2] = cstr_type;
 
                     // Define the suffix indicator for the two tasks to set in constraint names
                     std::string task_pair_str = "T" + std::to_string(t_idx1 + 1) + "_T" + std::to_string(t_idx2 + 1);
@@ -441,18 +424,35 @@ void set_workers_time_exclusion_constraints(
                     for (int op_idx : intersection_operators) {
                         GRBVar& t1_uses_op = assigned_operators_per_task[t_idx1][op_idx];
                         GRBVar& t2_uses_op = assigned_operators_per_task[t_idx2][op_idx];
+#if QUADRA
                         model.addQConstr(
                             ind1 * ind2 + t1_uses_op * t2_uses_op <= 1,
-                            "bind_overlap_O" + std::to_string(op_idx + 1) + "_" + task_pair_str);
+                            "bind_overlap_O" + std::to_string(op_idx + 1) + "_" + task_pair_str
+                        );
+#else
+                        model.addConstr(
+                            ind1 + ind2 + t1_uses_op + t2_uses_op <= 3,
+                            "bind_overlap_O" + std::to_string(op_idx + 1) + "_" + task_pair_str
+                        );
+#endif
                     }
 
                     // Prevent that the assigned machines overlap between the two tasks if they overlap in time
                     for (int ma_idx : intersection_machines) {
                         GRBVar& t1_uses_ma = assigned_machines_per_task[t_idx1][ma_idx];
                         GRBVar& t2_uses_ma = assigned_machines_per_task[t_idx2][ma_idx];
+
+#if QUADRA
                         model.addQConstr(
                             ind1 * ind2 + t1_uses_ma * t2_uses_ma <= 1,
-                            "bind_overlap_M" + std::to_string(ma_idx + 1) + "_" + task_pair_str);
+                            "bind_overlap_M" + std::to_string(ma_idx + 1) + "_" + task_pair_str
+                        );
+#else
+                        model.addConstr(
+                            ind1 + ind2 + t1_uses_ma + t2_uses_ma <= 3,
+                            "bind_overlap_M" + std::to_string(ma_idx + 1) + "_" + task_pair_str
+                        );
+#endif
                     }
                 }
             }
@@ -600,21 +600,11 @@ void greedy_solve_lookahead(
     Instance& inst,
     Solution& sol,
     int time_cursor,
+    int time_horizon,
     std::map<int, std::deque<int>>& job_stacks,
     std::unordered_map<int, int>& pending_task_per_job,
     std::ostream& log_stream
 ) {
-
-    // Report the contents of the stacks
-    log_stream << "Job stacks at time " << time_cursor << ":" << std::endl;
-    for (auto& [j_idx, task_stack] : job_stacks) {
-        log_stream << "J" << j_idx + 1 << ": ";
-        for (int t_idx : task_stack) {
-            log_stream << "T" << t_idx + 1 << " ";
-        }
-        log_stream << std::endl;
-    }
-
     std::set<int> available_machines;
     std::set<int> available_operators;
 
@@ -652,21 +642,20 @@ void greedy_solve_lookahead(
 
     int time_pos{ time_cursor };
 
-
+    log_stream << "~~~ Decisions made by the heuristic on this window: ~~~" << std::endl;
     while (!all_stacks_are_empty(job_stacks)) { // && time_pos < time_horizon
+
+        // First release the resources that are no longer used
+        for (int m_idx : release_calendar_machines[time_pos]) {
+            available_machines.insert(m_idx);
+        }
+        for (int o_idx : release_calendar_operators[time_pos]) {
+            available_operators.insert(o_idx);
+        }
 
         for (auto& [j_idx, task_stack] : job_stacks) {
             // Heuristic: iterate through jobs in order at each time step and
             // assign tasks and resources one at a time
-
-            // First release the resources that are no longer used
-            for (int m_idx : release_calendar_machines[time_pos]) {
-                available_machines.insert(m_idx);
-            }
-            for (int o_idx : release_calendar_operators[time_pos]) {
-                available_operators.insert(o_idx);
-            }
-
 
             // Process the first task in line for the job if it exists and if the processsing time of its predecessor is over
             if (task_stack.empty() || time_pos < next_time_persue_job[j_idx]) {
@@ -719,7 +708,6 @@ void greedy_solve_lookahead(
                 continue;
             }
 
-            // SOLVE THE COMPATIBILITY CONSTRAINTS HERE
 
             // Assign the workers to the task
             sol.machine_choice_tasks[t_idx] = chosen_machine;
@@ -735,7 +723,16 @@ void greedy_solve_lookahead(
             release_calendar_operators[time_pos + inst.tasks[t_idx].processing_time].insert(chosen_operator);
             // Remove the task from the stack
             task_stack.pop_front();
-            log_stream << "Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << " at time " << time_pos << std::endl;
+
+            // Display the assignment in the log stream
+            log_stream << "* T" << t_idx + 1 << " (J" << j_idx + 1 << ") scheduled at t=" << time_pos << " with M" << chosen_machine + 1 << " & O" << chosen_operator + 1;
+            if (time_cursor >= time_horizon) {
+                log_stream << " (postponed)";
+            }
+            else if (time_pos + inst.tasks[t_idx].processing_time > time_horizon) {
+                log_stream << " (pending in subsequent window)";
+            }
+            log_stream << std::endl;
 
         }
         time_pos++;
@@ -778,7 +775,7 @@ void resolve_lookahead(
     double time_limit,
     int max_threads,
     bool write_problem_file,
-    bool report_all_solutions,
+    bool report_all_decisions,
     std::ostream& log_stream
 ) {
 
@@ -882,11 +879,13 @@ void resolve_lookahead(
             inst,
             sol,
             time_cursor,
+            time_horizon,
             j_s,
             pending_task_per_job,
             log_stream
         );
 
+        log_stream << std::endl << "Improving the greedy pre-solution with Gurobi..." << std::endl;
         // Initialize Gurobi environment and model
         log_stream << "Initializing Gurobi environment and model..." << std::endl;
         GRBEnv env = GRBEnv(true);
@@ -919,7 +918,7 @@ void resolve_lookahead(
         std::map<int, GRBVar> tardiness_slacks;
         std::map<int, GRBVar> unit_penalties;
 
-        log_stream << "Adding slack and penalty variables for all jobs. " << std::endl;
+        log_stream << "Adding slack and penalty variables for all jobs..." << std::endl;
         set_slack_and_penalty_variables(
             model,
             tardiness_slacks,
@@ -966,7 +965,7 @@ void resolve_lookahead(
 
         // Set the OP-MA assignments compatibility constraints
         log_stream << "Setting workers OP-MA compatibility constraints..." << std::endl;
-        set_workers_compatibility_constraints(
+        set_workers_exclusion_constraints(
             inst,
             model,
             assigned_operators_per_task,
@@ -986,8 +985,7 @@ void resolve_lookahead(
             processed_tasks,
             processed_jobs,
             processed_tasks_of_jobs,
-            pending_task_per_job,
-            log_stream
+            pending_task_per_job
         );
 
         // Define the resulting completion dates variable of each processed job
@@ -1038,7 +1036,7 @@ void resolve_lookahead(
 
 
 
-        if (report_all_solutions) {
+        if (report_all_decisions) {
             GRBVar* vars = NULL;
             double* values = NULL;
             std::string* names = NULL;
@@ -1058,7 +1056,7 @@ void resolve_lookahead(
 
 
 
-        log_stream << "Decisions made by the solver on this window:" << std::endl;
+        log_stream << "~~~ Decisions made by the solver on this window: ~~~" << std::endl;
         for (int i = processed_tasks.size() - 1; i >= 0; --i) {
             // Reverse order to catch the tasks that are postponed and push them back in the same order in the job stacks
             int task_idx = processed_tasks[i];
@@ -1088,14 +1086,14 @@ void resolve_lookahead(
                 job_stacks[parent_job].emplace_front(task_idx);
                 // We traversed the tasks in reverse order to ensure that the tasks are pushed back here in the same order as they were popped off
                 // Because of the precedence constraints, we know that all tasks that are pushed back here are adjacent and follow each other in the job sequence
-                log_stream << "Task T" << task_idx + 1 << " postponed" << std::endl;
+                log_stream << "* T" << task_idx + 1 << " postponed" << std::endl;
             }
             else {
                 // Task begin time falls within the window and ends within or after the time horizon, we schedule it and fix it
                 sol.begin_time_tasks[task_idx] = begin_time;
                 sol.machine_choice_tasks[task_idx] = machine_choice;
                 sol.operator_choice_tasks[task_idx] = operator_choice;
-                log_stream << "T" << task_idx + 1 << " scheduled at t=" << begin_time << " with M" << machine_choice + 1 << " & O" << operator_choice + 1;
+                log_stream << "* T" << task_idx + 1 << " scheduled at t=" << begin_time << " with M" << machine_choice + 1 << " & O" << operator_choice + 1;
 
                 if (begin_time + inst.tasks[task_idx].processing_time > time_horizon
                     && begin_time < time_horizon) {
@@ -1104,7 +1102,6 @@ void resolve_lookahead(
                     log_stream << " (pending in subsequent window)";
                 }
                 log_stream << std::endl;
-
             }
         }
 
@@ -1125,4 +1122,146 @@ void resolve_lookahead(
         round++;
     }
 
+}
+
+
+
+
+void resolve_simple(
+    Instance& inst,
+    Solution& sol,
+    std::map<int, std::deque<int>>& job_stacks,
+    std::ostream& log_stream
+) {
+    int time_cursor{ 0 };
+    // Report the contents of the stacks
+    log_stream << "Job stacks at time " << time_cursor << ":" << std::endl;
+    for (auto& [j_idx, task_stack] : job_stacks) {
+        log_stream << "J" << j_idx + 1 << ": ";
+        for (int t_idx : task_stack) {
+            log_stream << "T" << t_idx + 1 << " ";
+        }
+        log_stream << std::endl;
+    }
+
+    std::set<int> available_machines;
+    std::set<int> available_operators;
+
+    // Create a pool of resources
+    for (int m_idx = 0; m_idx < inst.nb_machines; ++m_idx) {
+        available_machines.insert(m_idx);
+    }
+    for (int o_idx = 0; o_idx < inst.nb_operators; ++o_idx) {
+        available_operators.insert(o_idx);
+    }
+
+    // Create data structures for the release of resources by key time position
+    std::map<int, std::set<int>> release_calendar_machines;
+    std::map<int, std::set<int>> release_calendar_operators;
+
+    // Create a data structure to enforce the precedence
+    std::map<int, int> next_time_persue_job;
+    for (int j_idx = 0; j_idx < inst.nb_jobs; ++j_idx) {
+        next_time_persue_job[j_idx] = time_cursor;
+    }
+
+    int time_pos{ time_cursor };
+
+
+    while (!all_stacks_are_empty(job_stacks)) { // && time_pos < time_horizon
+        log_stream << std::endl << "*** Time " << time_pos << " ***" << std::endl;
+        // First release the resources that are no longer used
+        for (int m_idx : release_calendar_machines[time_pos]) {
+            available_machines.insert(m_idx);
+        }
+        for (int o_idx : release_calendar_operators[time_pos]) {
+            available_operators.insert(o_idx);
+        }
+
+        for (auto& [j_idx, task_stack] : job_stacks) {
+            // Heuristic: iterate through jobs in order at each time step and
+            // assign tasks and resources one at a time
+
+
+
+            // Process the first task in line for the job if it exists and if the processsing time of its predecessor is over
+            if (task_stack.empty() || time_pos < next_time_persue_job[j_idx]) {
+                continue;
+            }
+
+            if (available_machines.empty() || available_operators.empty()) {
+                continue;
+            }
+
+            int t_idx = task_stack.front();
+
+            // Compute intersection of available machines and authorized machines fot that task
+            // POSSIBLE = AVAILABLE INTERSECT AUTHORIZED
+            std::vector<int> possible_machines;
+            std::set<int>& authorized_machines = inst.tasks[t_idx].machines;
+            std::set_intersection(
+                available_machines.begin(), available_machines.end(),
+                authorized_machines.begin(), authorized_machines.end(),
+                std::back_inserter(possible_machines)
+            );
+
+            // If no machine is available, we skip the task
+            if (possible_machines.empty()) {
+                continue;
+            }
+
+            // Otherwise, we look for a qualified operator on one of the available machines for that task
+            int chosen_machine{ -1 };
+            int chosen_operator{ -1 };
+            std::vector<int> possible_operators;
+            std::set<int>& authorized_operators = inst.tasks[t_idx].operators;
+
+            for (int m_idx : possible_machines) {
+                possible_operators.clear();
+                std::set_intersection(
+                    available_operators.begin(), available_operators.end(),
+                    authorized_operators.begin(), authorized_operators.end(),
+                    std::back_inserter(possible_operators)
+                );
+                if (!possible_operators.empty()) {
+                    // Greedily assign the first compatible pair to the task
+                    chosen_operator = possible_operators.front();
+                    chosen_machine = m_idx;
+                    break;
+                }
+                else {
+                    continue;
+                }
+            }
+
+            if (chosen_machine == -1 || chosen_operator == -1) {
+                continue;
+            }
+
+
+            // Assign the workers to the task
+            sol.machine_choice_tasks[t_idx] = chosen_machine;
+            sol.operator_choice_tasks[t_idx] = chosen_operator;
+
+            // Schedule the task
+            sol.begin_time_tasks[t_idx] = time_pos;
+
+            // Prevent the subsequent assignment of any other task of the same job before the end of the current task
+            next_time_persue_job[j_idx] = time_pos + inst.tasks[t_idx].processing_time;
+            available_machines.erase(chosen_machine);
+            available_operators.erase(chosen_operator);
+
+            // Update the release calendar for the chosen machine and operator
+            release_calendar_machines[time_pos + inst.tasks[t_idx].processing_time].insert(chosen_machine);
+            release_calendar_operators[time_pos + inst.tasks[t_idx].processing_time].insert(chosen_operator);
+
+            // Remove the task from the stack
+            task_stack.pop_front();
+            log_stream << "Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << " at time " << time_pos << std::endl;
+            log_stream << " machine " << chosen_machine + 1 << " removed" << std::endl;
+            log_stream << " operator " << chosen_operator + 1 << " removed" << std::endl;
+
+        }
+        time_pos++;
+    }
 }

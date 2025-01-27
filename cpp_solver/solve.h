@@ -88,7 +88,7 @@ void set_workers_physical_overlap_constraints(
     std::vector<int>&
 );
 
-void set_workers_time_overlap_constraints(
+void set_workers_time_exclusion_constraints(
     Instance&,
     Solution&,
     GRBModel&,
@@ -98,8 +98,7 @@ void set_workers_time_overlap_constraints(
     std::vector<int>&,
     std::vector<int>&,
     std::map<int, std::vector<int>>&,
-    std::unordered_map<int, int>&,
-    std::ostream&
+    std::unordered_map<int, int>&
 );
 
 
@@ -131,6 +130,7 @@ void greedy_solve_lookahead(
     Instance&,
     Solution&,
     int,
+    int,
     std::map<int, std::deque<int>>,
     std::unordered_map<int, int>&
 );
@@ -157,6 +157,13 @@ void resolve_lookahead(
     int,
     bool,
     bool,
+    std::ostream&
+);
+
+void resolve_simple(
+    Instance&,
+    Solution&,
+    std::map<int, std::deque<int>>&,
     std::ostream&
 );
 
