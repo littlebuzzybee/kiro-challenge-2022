@@ -30,14 +30,14 @@ void print_set(std::set<int> s, int offset, std::ostream& out_stream) {
 
 
 void print_sequence(std::vector<int> v, int offset, std::ostream& out_stream) {
-        out_stream << "[";
-        for (auto& t : v) {
-            out_stream << t + offset;
-            if (t != v.back()) {
-                out_stream << "->";
-            }
+    out_stream << "[";
+    for (auto& t : v) {
+        out_stream << t + offset;
+        if (t != v.back()) {
+            out_stream << "->";
         }
-        out_stream << "]";
+    }
+    out_stream << "]";
 }
 
 
@@ -56,9 +56,10 @@ void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream
         for (const auto& cell : row.second) {
             if (cell.second == 3) {
                 out_stream << "\u00d7   ";
-            } else if (cell.second == 2) {
+            }
+            else if (cell.second == 2) {
                 out_stream << "o   ";
-            } 
+            }
             else if (cell.second == 1) {
                 out_stream << "m   ";
             }
@@ -99,7 +100,8 @@ void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream
             auto it = inner_map.find(col);
             if (it != inner_map.end()) {
                 out_stream << std::setw(4) << it->second; // Value in the cell
-            } else {
+            }
+            else {
                 out_stream << std::setw(4) << 0; // Default to 0 if no value exists
             }
         }
@@ -109,17 +111,17 @@ void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream
 
 Instance import_instance(std::string filename, std::ostream& out_stream = std::cout) {
     nlohmann::json inst_descriptor = read_json_file(filename);
-    
+
     Instance inst_object;
 
-    inst_object.nb_jobs       = inst_descriptor["parameters"]["size"]["nb_jobs"];
-    inst_object.nb_tasks      = inst_descriptor["parameters"]["size"]["nb_tasks"];
-    inst_object.nb_machines   = inst_descriptor["parameters"]["size"]["nb_machines"];
-    inst_object.nb_operators  = inst_descriptor["parameters"]["size"]["nb_operators"];
+    inst_object.nb_jobs = inst_descriptor["parameters"]["size"]["nb_jobs"];
+    inst_object.nb_tasks = inst_descriptor["parameters"]["size"]["nb_tasks"];
+    inst_object.nb_machines = inst_descriptor["parameters"]["size"]["nb_machines"];
+    inst_object.nb_operators = inst_descriptor["parameters"]["size"]["nb_operators"];
 
-    inst_object.unit_penalty  = inst_descriptor["parameters"]["costs"]["unit_penalty"];
-    inst_object.tardiness     = inst_descriptor["parameters"]["costs"]["tardiness"];
-    inst_object.interim       = inst_descriptor["parameters"]["costs"]["interim"];
+    inst_object.unit_penalty = inst_descriptor["parameters"]["costs"]["unit_penalty"];
+    inst_object.tardiness = inst_descriptor["parameters"]["costs"]["tardiness"];
+    inst_object.interim = inst_descriptor["parameters"]["costs"]["interim"];
 
 
     // Iterate over tasks, import and print details
@@ -128,15 +130,15 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
         // int task_idx = task_id - 1; // ids are offset by 1 in the JSON file
 
         Task task_object;
-        task_object.id              = task_descriptor["task"];
+        task_object.id = task_descriptor["task"];
         task_object.processing_time = task_descriptor["processing_time"];
-        task_object.machines        = std::set<int>();
-        task_object.operators       = std::set<int>();
-        
+        task_object.machines = std::set<int>();
+        task_object.operators = std::set<int>();
+
         for (auto& machine_descr : task_descriptor["machines"]) {
-            int machine_id          = static_cast<int>(machine_descr["machine"]);
-            int machine_idx         = machine_id - 1; // ids are offset by 1 in the JSON file
-            
+            int machine_id = static_cast<int>(machine_descr["machine"]);
+            int machine_idx = machine_id - 1; // ids are offset by 1 in the JSON file
+
             std::set<int> partial_ops = {};
             for (auto& operator_id : machine_descr["operators"]) {
                 int operator_idx = static_cast<int>(operator_id) - 1; // ids are offset by 1 in the JSON file
@@ -151,7 +153,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
         out_stream << "=== Imported task T" << task_object.id << " ===" << std::endl;
         out_stream << "* processing time: " << task_object.processing_time << std::endl;
         out_stream << "* possible supports: " << std::endl;
-        
+
         for (auto& m : task_object.machines) {
             out_stream << "  M" << m + 1 << " with O";
             print_set(task_object.compatibility[m], 1, out_stream);
@@ -172,16 +174,16 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
         Job job_object;
         job_object.id = job_id;
         job_object.release_date = job_descriptor["release_date"];
-        job_object.due_date     = job_descriptor["due_date"];
-        job_object.weight       = job_descriptor["weight"];
-        job_object.sequence     = std::vector<int>();
+        job_object.due_date = job_descriptor["due_date"];
+        job_object.weight = job_descriptor["weight"];
+        job_object.sequence = std::vector<int>();
 
         for (int task_id : job_descriptor["sequence"]) {
             int task_idx = task_id - 1; // ids are offset by 1 in the JSON file
             job_object.sequence.push_back(task_idx); // ids are offset by 1 in the JSON file
             inst_object.tasks[task_idx].job_parent = job_idx;
         }
-        
+
         // Commit log job details
         out_stream << "=== Imported job J" << job_object.id << " ===" << std::endl;
         out_stream << "* release date: " << job_object.release_date << std::endl;
@@ -209,3 +211,45 @@ bool all_stacks_are_empty(const std::map<int, std::deque<int>>& stacks) {
     }
     return true;
 }
+
+int compute_loss(const Instance& inst, const Solution& sol) {
+    int loss = 0;
+
+    for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
+        int last_task = inst.jobs[j_idx].sequence.back();
+        int wj = inst.jobs[j_idx].weight;
+        int Cj = sol.begin_time_tasks[last_task] + inst.tasks[last_task].processing_time;
+        int dj = inst.jobs[j_idx].due_date;
+        int Tj = std::max(Cj - dj, 0);
+        int Uj = Tj > 0 ? 1 : 0;
+        loss += wj * (Cj + inst.tardiness * Tj + inst.unit_penalty * Uj);
+    }
+    return loss;
+}
+
+/* 
+bool check_validity(const Instance& inst, const Solution& sol) {
+    // Check that all tasks are processed
+    int max_time = 0;
+    for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
+        int end_time = sol.begin_time_tasks[t_idx] + inst.tasks[t_idx].processing_time;
+        if (end_time > max_time) {
+            max_time = end_time;
+        }
+    }
+
+
+    for (int t = 0; t < max_time; t++) {
+        bool task_is_processed = false;
+        for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
+            if (sol.begin_time_tasks[t_idx] <= t && t < sol.begin_time_tasks[t_idx] + inst.tasks[t_idx].processing_time) {
+                task_is_processed = true;
+                break;
+            }
+        }
+        if (!task_is_processed) {
+            return false;
+        }
+    }
+    return true;
+} */

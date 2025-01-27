@@ -96,7 +96,6 @@ void set_workers_time_exclusion_constraints(
     std::map<int, std::map<int, GRBVar>>&,
     std::map<int, std::map<int, GRBVar>>&,
     std::vector<int>&,
-    std::vector<int>&,
     std::map<int, std::vector<int>>&,
     std::unordered_map<int, int>&
 );
@@ -157,6 +156,7 @@ void resolve_lookahead(
     int,
     bool,
     bool,
+    std::ostream&,
     std::ostream&
 );
 

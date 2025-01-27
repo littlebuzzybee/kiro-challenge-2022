@@ -9,7 +9,7 @@
 #include <set>
 #include <execution>
 #include <numeric>
-
+#include <chrono>
 
 #include "gurobi_c++.h"
 #include "utils.h"
@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
     bool report_all_decisions = false;
     int max_threads = 3;
     bool write_problem_file = false;
-    bool solve_greedy = false;
+    int method_code = 2;
 
 
     for (int i = 2; i < argc; i++) {
@@ -48,38 +48,46 @@ int main(int argc, char* argv[]) {
             std::string value = arg.substr(17);
             max_threads = std::stoi(value);
             assert(max_threads > 0);
-            std::cout << "Gurobi threads set to " << max_threads << std::endl;
         }
         if (arg.find("--time_limit=") == 0) {
             std::string value = arg.substr(13);
             time_limit = std::stod(value);
             assert(time_limit > 0);
-            std::cout << "Time limit set to " << time_limit << " seconds" << std::endl;
         }
         if (arg.find("--lookahead=") == 0) {
             std::string value = arg.substr(12);
             lookahead_duration = std::stoi(value);
             assert(lookahead_duration > 0);
-            std::cout << "Lookahead duration set to " << lookahead_duration << " time units" << std::endl;
         }
         if (arg.find("--write_problem_file") == 0) {
             write_problem_file = true;
-            std::cout << "Problem files will be written" << std::endl;
         }
         if (arg.find("--report_all_decisions") == 0) {
             report_all_decisions = true;
-            std::cout << "All decisions will be reported" << std::endl;
         }
-        if (arg.find("--solve_greedy") == 0) {
-            solve_greedy = true;
-            std::cout << "Greedy solution will be computed" << std::endl;
+        if (arg.find("--method=") == 0) {
+            std::string method = arg.substr(9);
+            if (method == "solver") {
+                method_code = 1;
+            }
+            else if (method == "heuristic") {
+                method_code = 2;
+            }
+            else {
+                std::cerr << "Invalid method provided." << std::endl;
+                exit(1);
+            }
         }
     }
 
 
 
-    std::ofstream log_file("./cpp_solve.log");
-    Instance inst = import_instance(instance_filename, log_file);
+    std::ofstream log_solve("./log_solve.log");
+    std::ofstream log_import("./log_import.log");
+    std::ostream& log_inform = std::cout;
+
+
+    Instance inst = import_instance(instance_filename, log_import);
 
     // Fill the jobs stacks with the tasks
     std::map<int, std::deque<int>> job_stacks;
@@ -103,9 +111,10 @@ int main(int argc, char* argv[]) {
         total_time_per_job[j_idx] = total_processing_time;
     }
 
-    log_file << std::setw(5) << "J" << std::setw(8) << "W_J" << std::setw(8) << "\u03A3d_T" << std::setw(8) << "t_rel" << std::setw(8) << "t_due" << std::endl;
+    log_inform << std::endl << "===== Instance Details: =====" << std::endl;
+    log_inform << std::setw(5) << "J" << std::setw(8) << "W_J" << std::setw(8) << "\u03A3d_T" << std::setw(8) << "t_rel" << std::setw(8) << "t_due" << std::endl;
     for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
-        log_file << std::setw(5) << j_idx + 1
+        log_inform << std::setw(5) << j_idx + 1
             << std::setw(8) << inst.jobs[j_idx].weight
             << std::setw(8) << total_time_per_job[j_idx]
             << std::setw(8) << inst.jobs[j_idx].release_date
@@ -128,38 +137,53 @@ int main(int argc, char* argv[]) {
     // Declare the set of pending tasks (should be a small set of indices between each iteration since tasks durations are quite limited in comparison to the lookahead duration)
     std::unordered_map<int, int> pending_tasks_per_job{};
 
+    auto start = std::chrono::high_resolution_clock::now();
+    auto stop = std::chrono::high_resolution_clock::now();
 
-    if (solve_greedy) {
-        log_file << "Beginning solving procedure with heuristics..." << std::endl;
+    switch (method_code)
+    {
+    case 2:
+        start = std::chrono::high_resolution_clock::now();
         resolve_simple(
             inst,
             sol,
             job_stacks,
-            log_file
+            log_solve
         );
-    }
-    else {
-        log_file << "Beginning solving procedure with lookahead duration " << lookahead_duration << "..." << std::endl;
+        stop = std::chrono::high_resolution_clock::now();
+        break;
+
+    case 1:
+        start = std::chrono::high_resolution_clock::now();
         resolve_lookahead(
             inst, sol, job_stacks, pending_tasks_per_job,
-            lookahead_duration, time_limit, max_threads, write_problem_file, report_all_decisions, log_file
+            lookahead_duration, time_limit, max_threads, write_problem_file, report_all_decisions, log_solve, log_inform
         );
+        stop = std::chrono::high_resolution_clock::now();
+        break;
     }
 
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    log_inform << "Solution computed solution in " << duration.count() << " \u33B2." << std::endl;
 
     // Now display all decisions in the solution
-    log_file << "===== Final Solution Decisions: =====" << std::endl;
-    log_file << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << std::endl;
+    log_inform << "===== Solution Details: =====" << std::endl;
+    log_inform << std::setw(5) << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << std::endl;
     for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
-        log_file << "T" << t_idx + 1
+        log_inform << std::setw(5) << "T" << t_idx + 1
             << std::setw(8) << sol.begin_time_tasks[t_idx]
             << std::setw(10) << "M" << sol.machine_choice_tasks[t_idx] + 1
             << std::setw(10) << "O" << sol.operator_choice_tasks[t_idx] + 1
             << std::endl;
     }
 
+    int total_loss = compute_loss(inst, sol);
+    log_inform << "Total loss: " << total_loss << std::endl;
 
-    log_file.close();
+
+
+    log_solve.close();
+    log_import.close();
     return 0;
 }
 

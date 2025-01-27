@@ -335,7 +335,6 @@ void set_workers_time_exclusion_constraints(
     std::map<int, std::map<int, GRBVar>>& begin_times_tasks_per_job,
     std::map<int, std::map<int, GRBVar>>& assigned_operators_per_task,
     std::map<int, std::map<int, GRBVar>>& assigned_machines_per_task,
-    std::vector<int>& processed_tasks,
     std::vector<int>& processed_jobs,
     std::map<int, std::vector<int>>& processed_tasks_of_jobs,
     std::unordered_map<int, int>& pending_task_per_job
@@ -594,9 +593,7 @@ void set_objective_function(
 
 
 
-
-
-void greedy_solve_lookahead(
+void greedy_partial_solve_lookahead(
     Instance& inst,
     Solution& sol,
     int time_cursor,
@@ -776,12 +773,9 @@ void resolve_lookahead(
     int max_threads,
     bool write_problem_file,
     bool report_all_decisions,
-    std::ostream& log_stream
+    std::ostream& log_stream,
+    std::ostream& inform_stream
 ) {
-
-
-
-
     // Begin by identifying the tasks that are relevant in the lookahead window
     std::map<int, std::vector<int>> processed_tasks_of_jobs; // ordered set of tasks for each job
     std::map<int, int> cumulative_remainder_time_per_job;
@@ -792,6 +786,15 @@ void resolve_lookahead(
     int time_horizon{ 0 };
     int time_cursor{ 0 };
     int round = 1;
+    inform_stream << "Beginning solving procedure with solver-augmented iterative heuristic..." << std::endl;
+    inform_stream << "Lookahead duration set to " << lookahead << " time units." << std::endl;
+    inform_stream << "Solve time limit set to " << time_limit << " seconds." << std::endl;
+    inform_stream << "Gurobi threads set to " << max_threads << std::endl;
+
+    log_stream << "Initializing Gurobi environment..." << std::endl;
+    GRBEnv gurobi_env = GRBEnv(true);
+    gurobi_env.set("LogFile", "gurobi.log");
+    gurobi_env.start();
 
     while (!all_stacks_are_empty(job_stacks)) {
         // While there are tasks to process in the lookahead window
@@ -799,6 +802,7 @@ void resolve_lookahead(
         time_horizon = time_cursor + lookahead;
         log_stream << "**********************************************************" << std::endl;
         log_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]..." << std::endl;
+        inform_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]..." << std::endl;
 
 
 
@@ -875,7 +879,7 @@ void resolve_lookahead(
                 } */
                 // Warm up the solution with the greedy solution
         log_stream << "Computing a greedy partial solution to warm up the model..." << std::endl;
-        greedy_solve_lookahead(
+        greedy_partial_solve_lookahead(
             inst,
             sol,
             time_cursor,
@@ -887,16 +891,21 @@ void resolve_lookahead(
 
         log_stream << std::endl << "Improving the greedy pre-solution with Gurobi..." << std::endl;
         // Initialize Gurobi environment and model
-        log_stream << "Initializing Gurobi environment and model..." << std::endl;
-        GRBEnv env = GRBEnv(true);
-        env.set("LogFile", "gurobi.log");
-        env.start();
-        GRBModel model = GRBModel(env);
+        // inform_stream << "Creating model..." << std::endl;
+        GRBModel model = GRBModel(gurobi_env);
+        model.set(GRB_IntParam_LogToConsole, 0); // Do not log to console
         model.set(GRB_StringAttr_ModelName, "Time_Scheduling_Round_" + std::to_string(1));
         model.set(GRB_IntParam_OutputFlag, 1);
         model.set(GRB_IntParam_Threads, max_threads);
         model.set(GRB_DoubleParam_TimeLimit, time_limit);
-        model.set(GRB_IntParam_MIPFocus, 3);
+        model.set(GRB_IntParam_MIPFocus, 3); // Focus on finding new feasible solutions
+        model.set(GRB_IntParam_Presolve, 2); // Aggressive presolve
+        model.set(GRB_IntParam_PrePasses, 1); // One presolve pass only to limit the time spent on presolve
+        model.set(GRB_DoubleParam_Heuristics, 0.1); // Increase the proportion of time spent on heuristics from 5% (default) to 10%
+        model.set(GRB_DoubleParam_MIPGap, 0.05); // 5% optimality gap
+        model.set(GRB_IntParam_Method, -1); // Automatic method selection
+
+
 
 
         // Declare the begin times of each task and set the ordering constraints
@@ -965,6 +974,7 @@ void resolve_lookahead(
 
         // Set the OP-MA assignments compatibility constraints
         log_stream << "Setting workers OP-MA compatibility constraints..." << std::endl;
+        // These constraints are redundant but might help with constraint propagation, I guess
         set_workers_exclusion_constraints(
             inst,
             model,
@@ -982,7 +992,6 @@ void resolve_lookahead(
             begin_times_tasks_per_job,
             assigned_operators_per_task,
             assigned_machines_per_task,
-            processed_tasks,
             processed_jobs,
             processed_tasks_of_jobs,
             pending_task_per_job
@@ -1021,22 +1030,49 @@ void resolve_lookahead(
         );
         log_stream << std::endl;
 
-        // log_stream << "Tuning model parameters..." << std::endl;
-        // model.tune();
-
 
         if (write_problem_file) {
             log_stream << "Writing model to file..." << std::endl;
-            model.write("model" + std::to_string(round) + ".mps");
-            model.write("model" + std::to_string(round) + ".lp");
+            model.write("lp_problems/model" + std::to_string(round) + ".mps");
+            model.write("lp_problems/model" + std::to_string(round) + ".lp");
         }
 
+        model.update();
+        int num_Vars = model.get(GRB_IntAttr_NumVars);
+        int num_Constrs = model.get(GRB_IntAttr_NumConstrs);
+        int num_SOS = model.get(GRB_IntAttr_NumSOS);
+        int num_QConstrs = model.get(GRB_IntAttr_NumQConstrs);
+        int num_GenConstrs = model.get(GRB_IntAttr_NumGenConstrs);
+        int num_IntVars = model.get(GRB_IntAttr_NumIntVars);
+        int num_BinVars = model.get(GRB_IntAttr_NumBinVars);
+        log_stream << "Model has " << num_Vars << " variables" << std::endl;
+        log_stream << "Model has " << num_IntVars << " integer variables" << std::endl;
+        log_stream << "Model has " << num_BinVars << " binary variables" << std::endl;
+        log_stream << "Model has " << num_Constrs << " linear constraints" << std::endl;
+        log_stream << "Model has " << num_SOS << " SOS constraints" << std::endl;
+        log_stream << "Model has " << num_QConstrs << " quadratic constraints" << std::endl;
+        log_stream << "Model has " << num_GenConstrs << " general constraints" << std::endl;
+        int is_MIP = model.get(GRB_IntAttr_IsMIP);
+        int is_QP = model.get(GRB_IntAttr_IsQP);
+        int is_QCP = model.get(GRB_IntAttr_IsQCP);
+
+        log_stream << "Model is a MIP: " << is_MIP << std::endl;
+        log_stream << "Model is a QP: " << is_QP << std::endl;
+        log_stream << "Model is a QCP: " << is_QCP << std::endl << std::endl;
+
+
+        // log_stream << "Tuning model parameters..." << std::endl;
+        // model.tune();
         model.optimize();
         assert(model.get(GRB_IntAttr_SolCount) > 0);
-
+        int status_code = model.get(GRB_IntAttr_Status);
+        auto obj = model.get(GRB_DoubleAttr_ObjVal);
+        log_stream << "Model status code: " << status_code << std::endl;
+        log_stream << "Partial objective value on window: " << obj << std::endl;
 
 
         if (report_all_decisions) {
+            std::cout << "Complete set of decision variables:" << std::endl;
             GRBVar* vars = NULL;
             double* values = NULL;
             std::string* names = NULL;
@@ -1121,7 +1157,6 @@ void resolve_lookahead(
         time_cursor += lookahead;
         round++;
     }
-
 }
 
 
@@ -1133,6 +1168,9 @@ void resolve_simple(
     std::map<int, std::deque<int>>& job_stacks,
     std::ostream& log_stream
 ) {
+
+    log_stream << "Beginning solving procedure with an elementary iterative heuristic..." << std::endl;
+
     int time_cursor{ 0 };
     // Report the contents of the stacks
     log_stream << "Job stacks at time " << time_cursor << ":" << std::endl;
@@ -1170,18 +1208,21 @@ void resolve_simple(
 
     while (!all_stacks_are_empty(job_stacks)) { // && time_pos < time_horizon
         log_stream << std::endl << "*** Time " << time_pos << " ***" << std::endl;
+
         // First release the resources that are no longer used
+        log_stream << "  removed: ";
         for (int m_idx : release_calendar_machines[time_pos]) {
             available_machines.insert(m_idx);
+            log_stream << "M" << m_idx + 1 << " ";
         }
         for (int o_idx : release_calendar_operators[time_pos]) {
             available_operators.insert(o_idx);
+            log_stream << "O" << o_idx + 1 << " ";
         }
 
         for (auto& [j_idx, task_stack] : job_stacks) {
             // Heuristic: iterate through jobs in order at each time step and
             // assign tasks and resources one at a time
-
 
 
             // Process the first task in line for the job if it exists and if the processsing time of its predecessor is over
@@ -1258,10 +1299,8 @@ void resolve_simple(
             // Remove the task from the stack
             task_stack.pop_front();
             log_stream << "Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << " at time " << time_pos << std::endl;
-            log_stream << " machine " << chosen_machine + 1 << " removed" << std::endl;
-            log_stream << " operator " << chosen_operator + 1 << " removed" << std::endl;
-
         }
         time_pos++;
     }
+    log_stream << std::endl << "End of solving procedure." << std::endl << std::endl;
 }

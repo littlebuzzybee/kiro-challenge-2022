@@ -55,4 +55,6 @@ void print_sequence(std::vector<int>, int, std::ostream&);
 void display_cstr_matrix(std::map<int, std::map<int, int>>&, std::ostream&);
 void displayMatrix(const std::map<int, std::map<int, int>>&, std::ostream&);
 bool all_stacks_are_empty(const std::map<int, std::deque<int>>&);
+int compute_loss(const Instance&, const Solution&);
+
 #endif
