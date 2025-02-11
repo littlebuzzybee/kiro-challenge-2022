@@ -38,7 +38,7 @@ simple: scheduler
 SRC_DIR = cpp_solver
 BIN_DIR = $(SRC_DIR)/objects
 
-SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve.cpp $(SRC_DIR)/main.cpp
+SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/breakdown.cpp 
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
 
 INSTANCES_DIR = instances
