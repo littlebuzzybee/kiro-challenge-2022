@@ -72,7 +72,7 @@ void set_assignment_variables(
 );
 
 
-void set_workers_compatibility_constraints(
+void set_workers_ubiquity_constraints(
     Instance&,
     GRBModel&,
     std::map<int, std::map<int, GRBVar>>&,
@@ -80,7 +80,7 @@ void set_workers_compatibility_constraints(
     std::vector<int>&
 );
 
-void set_workers_physical_overlap_constraints(
+void set_workers_uniqueness_constraints(
     Instance&,
     GRBModel&,
     std::map<int, std::map<int, GRBVar>>&,
@@ -97,7 +97,8 @@ void set_workers_time_exclusion_constraints(
     std::map<int, std::map<int, GRBVar>>&,
     std::vector<int>&,
     std::map<int, std::vector<int>>&,
-    std::unordered_map<int, int>&
+    std::unordered_map<int, int>&,
+    std::ostream&
 );
 
 
@@ -125,13 +126,14 @@ void set_objective_function(
 
 
 
-void greedy_solve_lookahead(
+void greedy_partial_solve_lookahead(
     Instance&,
     Solution&,
     int,
     int,
-    std::map<int, std::deque<int>>,
-    std::unordered_map<int, int>&
+    std::map<int, std::deque<int>>&,
+    std::unordered_map<int, int>&,
+    std::ostream&
 );
 
 void warmup_solution(
@@ -140,8 +142,7 @@ void warmup_solution(
     std::vector<int>,
     std::map<int, std::map<int, GRBVar>>,
     std::map<int, std::map<int, GRBVar>>,
-    std::map<int, std::map<int, GRBVar>>,
-    std::ostream&
+    std::map<int, std::map<int, GRBVar>>
 );
 
 

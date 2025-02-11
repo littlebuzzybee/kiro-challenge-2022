@@ -56,5 +56,5 @@ void display_cstr_matrix(std::map<int, std::map<int, int>>&, std::ostream&);
 void displayMatrix(const std::map<int, std::map<int, int>>&, std::ostream&);
 bool all_stacks_are_empty(const std::map<int, std::deque<int>>&);
 int compute_loss(const Instance&, const Solution&);
-
+bool check_validity(const Instance&, const Solution&);
 #endif

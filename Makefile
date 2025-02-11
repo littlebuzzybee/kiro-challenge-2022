@@ -23,7 +23,7 @@ debug: CXXFLAGS += -g3 -O0
 debug: scheduler
 
 # a rule for building the program fully optimized and release it
-build: CXXFLAGS += -O3 -DNDEBUG
+build: CXXFLAGS += -O3 -DNDEBUG -fopt-info-vec -fopenmp
 build: scheduler
 
 # a rule for profiling the program
@@ -38,7 +38,7 @@ simple: scheduler
 SRC_DIR = cpp_solver
 BIN_DIR = $(SRC_DIR)/objects
 
-SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve.cpp $(SRC_DIR)/main.cpp 
+SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve.cpp $(SRC_DIR)/main.cpp
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
 
 INSTANCES_DIR = instances

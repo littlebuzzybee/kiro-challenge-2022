@@ -124,17 +124,16 @@ int main(int argc, char* argv[]) {
 
     Solution sol;
     // Initialize the solution's vectors
+
     // time variables
-    sol.begin_time_tasks.assign(inst.nb_tasks, 0);
-    // sol.end_time_tasks.assign(inst.nb_tasks, 0);
-    sol.completion_date_jobs.assign(inst.nb_jobs, 0);
-    // choice variables
-    sol.machine_choice_tasks.assign(inst.nb_tasks, 0);
-    sol.operator_choice_tasks.assign(inst.nb_tasks, 0);
+    sol.begin_time_tasks.assign(inst.nb_tasks, -1);
+    sol.completion_date_jobs.assign(inst.nb_jobs, -1);
+    // decision variables
+    sol.machine_choice_tasks.assign(inst.nb_tasks, -1);
+    sol.operator_choice_tasks.assign(inst.nb_tasks, -1);
 
 
-
-    // Declare the set of pending tasks (should be a small set of indices between each iteration since tasks durations are quite limited in comparison to the lookahead duration)
+    // Declare the set of pending tasks (should be a small set of indices between each iteration since tasks durations are quite limited compared to the lookahead duration)
     std::unordered_map<int, int> pending_tasks_per_job{};
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -142,6 +141,14 @@ int main(int argc, char* argv[]) {
 
     switch (method_code)
     {
+    case 1:
+        start = std::chrono::high_resolution_clock::now();
+        resolve_lookahead(
+            inst, sol, job_stacks, pending_tasks_per_job,
+            lookahead_duration, time_limit, max_threads, write_problem_file, report_all_decisions, log_solve, log_inform
+        );
+        stop = std::chrono::high_resolution_clock::now();
+        break;
     case 2:
         start = std::chrono::high_resolution_clock::now();
         resolve_simple(
@@ -152,22 +159,13 @@ int main(int argc, char* argv[]) {
         );
         stop = std::chrono::high_resolution_clock::now();
         break;
-
-    case 1:
-        start = std::chrono::high_resolution_clock::now();
-        resolve_lookahead(
-            inst, sol, job_stacks, pending_tasks_per_job,
-            lookahead_duration, time_limit, max_threads, write_problem_file, report_all_decisions, log_solve, log_inform
-        );
-        stop = std::chrono::high_resolution_clock::now();
-        break;
     }
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    log_inform << "Solution computed solution in " << duration.count() << " \u33B2." << std::endl;
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
+
 
     // Now display all decisions in the solution
-    log_inform << "===== Solution Details: =====" << std::endl;
+    log_inform << std::endl << "===== Solution Details: =====" << std::endl;
     log_inform << std::setw(5) << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << std::endl;
     for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
         log_inform << std::setw(5) << "T" << t_idx + 1
@@ -180,7 +178,14 @@ int main(int argc, char* argv[]) {
     int total_loss = compute_loss(inst, sol);
     log_inform << "Total loss: " << total_loss << std::endl;
 
-
+    log_inform << "Solution computed solution in " << duration.count() << " s." << std::endl; // \u33B2
+    // Check the validity of the solution
+    if (check_validity(inst, sol)) {
+        log_inform << "The solution is valid." << std::endl;
+    }
+    else {
+        log_inform << "The solution is invalid." << std::endl;
+    }
 
     log_solve.close();
     log_import.close();

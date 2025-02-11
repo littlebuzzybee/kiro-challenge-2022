@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include "utils.h"
 #include "json.hpp"
+#include <omp.h>
 
 
 nlohmann::json read_json_file(std::string filename) {
@@ -125,6 +126,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
 
 
     // Iterate over tasks, import and print details
+#pragma omp parallel for
     for (auto& task_descriptor : inst_descriptor["tasks"]) {
         // int task_id = task_descriptor["task"];
         // int task_idx = task_id - 1; // ids are offset by 1 in the JSON file
@@ -142,8 +144,8 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
             std::set<int> partial_ops = {};
             for (auto& operator_id : machine_descr["operators"]) {
                 int operator_idx = static_cast<int>(operator_id) - 1; // ids are offset by 1 in the JSON file
-                partial_ops.insert(operator_idx);    // add the operator to the set of possible operators for that task
-                task_object.operators.insert(operator_idx); // add the operator to the set of all possible operators for the task
+                partial_ops.emplace(operator_idx);    // add the operator to the set of possible operators for that task
+                task_object.operators.emplace(operator_idx); // add the operator to the set of all possible operators for the task
             }
             task_object.compatibility.emplace(machine_idx, partial_ops);
             task_object.machines.emplace(machine_idx); // add the machine to the set of possible machines
@@ -159,7 +161,12 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
             print_set(task_object.compatibility[m], 1, out_stream);
             out_stream << std::endl;
         }
+        out_stream << "* Combined Machines: ";
+        print_set(task_object.machines, 1, out_stream);
         out_stream << std::endl;
+        out_stream << "* Combined Operators: ";
+        print_set(task_object.operators, 1, out_stream);
+        out_stream << std::endl << std::endl;
 
         // Commit task object to instance
         inst_object.tasks.push_back(task_object);
@@ -167,6 +174,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
 
     out_stream << std::endl;
     // Iterate over jobs, import and print details
+#pragma omp parallel for
     for (auto& job_descriptor : inst_descriptor["jobs"]) {
         int job_id = job_descriptor["job"];
         int job_idx = job_id - 1; // ids are offset by 1 in the JSON file
@@ -227,29 +235,73 @@ int compute_loss(const Instance& inst, const Solution& sol) {
     return loss;
 }
 
-/* 
+
+
+// TODO: implement the check validity function
+
 bool check_validity(const Instance& inst, const Solution& sol) {
-    // Check that all tasks are processed
+
+    // Check that all tasks are processed and that begin times are valid
     int max_time = 0;
     for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
+        if (sol.begin_time_tasks[t_idx] < 0) {
+            return false;
+        }
+
         int end_time = sol.begin_time_tasks[t_idx] + inst.tasks[t_idx].processing_time;
         if (end_time > max_time) {
             max_time = end_time;
         }
     }
 
-
-    for (int t = 0; t < max_time; t++) {
-        bool task_is_processed = false;
-        for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
-            if (sol.begin_time_tasks[t_idx] <= t && t < sol.begin_time_tasks[t_idx] + inst.tasks[t_idx].processing_time) {
-                task_is_processed = true;
-                break;
+    // Check that tasks are processed in order
+    for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
+        auto& sequence = inst.jobs[j_idx].sequence;
+        for (int k = 0; k < static_cast<int>(sequence.size()); k++) {
+            int t_idx = sequence[k];
+            int lower_bound = k == 0 ? inst.jobs[j_idx].release_date : sol.begin_time_tasks[sequence[k - 1]] + inst.tasks[sequence[k - 1]].processing_time;
+            if (lower_bound > sol.begin_time_tasks[t_idx]) {
+                std::cout << "Task " << t_idx + 1 << " of job " << j_idx + 1 << " is processed before the end of the previous task." << std::endl;
+                std::cout << "Previous task end time: " << lower_bound << ", task begin time: " << sol.begin_time_tasks[t_idx] << std::endl;
+                return false;
             }
         }
-        if (!task_is_processed) {
-            return false;
+    }
+
+    std::vector<bool> processed_tasks = std::vector<bool>(inst.nb_tasks, false);
+    std::set<int> busy_machines = std::set<int>();
+    std::set<int> busy_operators = std::set<int>();
+
+    std::map<int, int> task_of_machine = std::map<int, int>();
+    std::map<int, int> task_of_operator = std::map<int, int>();
+    // Check that resources are not overlaping
+    for (int t = 0; t < max_time; t++) {
+        for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
+            if (sol.begin_time_tasks[t_idx] <= t && t < sol.begin_time_tasks[t_idx] + inst.tasks[t_idx].processing_time) {
+
+                int m_idx = sol.machine_choice_tasks[t_idx];
+                int o_idx = sol.operator_choice_tasks[t_idx];
+
+
+                if (busy_machines.contains(m_idx)) {
+                    std::cout << "M" << m_idx + 1 << " is busy at time " << t << " from T" << task_of_machine[m_idx] + 1 << " but T" << t_idx + 1 << " uses it again." << std::endl;
+                    return false;
+                }
+                if (busy_operators.contains(o_idx)) {
+                    std::cout << "O" << o_idx + 1 << " is busy at time " << t << " from T" << task_of_operator[o_idx] + 1 << " but T" << t_idx + 1 << " uses it again." << std::endl;
+                    return false;
+                }
+
+                task_of_machine[m_idx] = t_idx;
+                task_of_operator[o_idx] = t_idx;
+
+                busy_machines.insert(m_idx);
+                busy_operators.insert(o_idx);
+                processed_tasks[t_idx] = true;
+            }
         }
+        busy_machines.clear();
+        busy_operators.clear();
     }
     return true;
-} */
+}
