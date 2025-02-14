@@ -17,7 +17,14 @@
 #define QUADRA 0
 
 
-
+struct ExplorationNode {
+    std::vector<std::vector<bool>> shared_machines;
+    std::vector<std::vector<bool>> shared_operators;
+    std::set<int> available_machines;
+    std::set<int> available_operators;
+    std::set<int> to_process_tasks;
+    int addressed_score; // total loss avoided in the node's state
+};
 
 
 void get_relevant_tasks(

@@ -7,6 +7,7 @@
 #include <map>
 #include <deque>
 #include <set>
+#include <queue>
 
 
 #include "utils.h"
@@ -34,7 +35,7 @@ void resolve_lookahead(
 ) {
     // Begin by identifying the tasks that are relevant in the lookahead window
     std::map<int, std::vector<int>> processed_tasks_of_jobs; // ordered set of tasks for each job
-    std::map<int, int> cumulative_remainder_time_per_job;
+    std::map<int, int> cumulative_remaining_time_per_job;
     std::vector<int> processed_jobs;
     std::vector<int> processed_tasks;
 
@@ -85,7 +86,7 @@ void resolve_lookahead(
             processed_tasks,
             processed_jobs,
             processed_tasks_of_jobs,
-            cumulative_remainder_time_per_job,
+            cumulative_remaining_time_per_job,
             pending_task_per_job
         );
 
@@ -262,7 +263,7 @@ void resolve_lookahead(
             begin_times_tasks_per_job,
             processed_jobs,
             processed_tasks_of_jobs,
-            cumulative_remainder_time_per_job
+            cumulative_remaining_time_per_job
         );
 
 
@@ -458,11 +459,26 @@ void resolve_simple(
         next_time_persue_job[j_idx] = inst.jobs[j_idx].release_date;
     }
 
+    std::map<int, int> cumulative_remaining_time_per_job;
+    for (auto& [j_idx, _] : job_stacks) {
+        std::deque<int>& remaining_tasks_sequence = job_stacks[j_idx];
+        int total_processing_time = std::reduce(
+            remaining_tasks_sequence.begin(),
+            remaining_tasks_sequence.end(),
+            0, // Initial value of the sum
+            [&inst](int total_sum, int t_idx) {
+                return total_sum + inst.tasks[t_idx].processing_time;
+            }
+        );
+        cumulative_remaining_time_per_job[j_idx] = total_processing_time;
+    }
+
     int time_pos{ time_cursor };
 
 
     while (!all_stacks_are_empty(job_stacks)) { // && time_pos < time_horizon
         log_stream << std::endl << "*** Time " << time_pos << " ***" << std::endl;
+
 
         // First release the resources that are no longer used
         log_stream << "  removed: ";
@@ -475,21 +491,37 @@ void resolve_simple(
             log_stream << "O" << o_idx + 1 << " ";
         }
 
+
+        std::priority_queue<std::tuple<int, int>> task_queue{};
+        // first integer is the score, second integer is the job index
+        // score is a function of the tardiness of the job and its weight
+        // to act as a proxy of the to-be objective terms
+
+        // First, we insert the tasks that are ready to be processed in a sorted priority queue to be ranked and compared
+        // there is at most only one task per job in the stack and we decide which to adress in order of priority
+
         for (auto& [j_idx, task_stack] : job_stacks) {
-            // Heuristic: iterate through jobs in order at each time step and
-            // assign tasks and resources one at a time
-
-
-            // Process the first task in line for the job if it exists and if the processsing time of its predecessor is over
+            // Insert the first task in line for the job if it exists and if the processing time of its predecessor is over
             if (task_stack.empty() || time_pos < next_time_persue_job[j_idx]) {
                 continue;
             }
-
-            if (available_machines.empty() || available_operators.empty()) {
-                continue;
-            }
-
             int t_idx = task_stack.front();
+            int tardiness = std::max(0, time_pos + cumulative_remaining_time_per_job[j_idx] - inst.jobs[j_idx].due_date);
+            int score = inst.jobs[j_idx].weight * tardiness;
+            std::tuple<int, int> task_entry = std::make_tuple(score, t_idx);
+            task_queue.emplace(task_entry);
+        }
+
+
+
+
+        while (!task_queue.empty() && !available_machines.empty() && !available_operators.empty()) {
+            // Heuristic: iterate through tasks in order of priority at that time step and
+            // assign tasks and resources one at a time
+
+            auto [tardiness, t_idx] = task_queue.top();
+            task_queue.pop();
+            int j_idx = inst.tasks[t_idx].job_parent;
 
             // Compute intersection of available machines and authorized machines fot that task
             // POSSIBLE = AVAILABLE INTERSECT AUTHORIZED
@@ -519,6 +551,7 @@ void resolve_simple(
                     authorized_operators.begin(), authorized_operators.end(),
                     std::back_inserter(possible_operators)
                 );
+
                 if (!possible_operators.empty()) {
                     // Greedily assign the first compatible pair to the task
                     chosen_operator = possible_operators.front();
@@ -530,6 +563,7 @@ void resolve_simple(
                 }
             }
 
+            // If no machine or operator is available, we skip the task
             if (chosen_machine == -1 || chosen_operator == -1) {
                 continue;
             }
@@ -550,9 +584,10 @@ void resolve_simple(
             // Update the release calendar for the chosen machine and operator
             release_calendar_machines[time_pos + inst.tasks[t_idx].processing_time].insert(chosen_machine);
             release_calendar_operators[time_pos + inst.tasks[t_idx].processing_time].insert(chosen_operator);
+            cumulative_remaining_time_per_job[j_idx] -= inst.tasks[t_idx].processing_time;
 
             // Remove the task from the stack
-            task_stack.pop_front();
+            job_stacks[j_idx].pop_front();
             log_stream << "Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << " at time " << time_pos << std::endl;
         }
         time_pos++;

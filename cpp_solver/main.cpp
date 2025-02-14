@@ -136,8 +136,8 @@ int main(int argc, char* argv[]) {
     // Declare the set of pending tasks (should be a small set of indices between each iteration since tasks durations are quite limited compared to the lookahead duration)
     std::unordered_map<int, int> pending_tasks_per_job{};
 
-    auto start = std::chrono::high_resolution_clock::now();
-    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point start;
+    std::chrono::high_resolution_clock::time_point stop;
 
     switch (method_code)
     {
@@ -161,7 +161,6 @@ int main(int argc, char* argv[]) {
         break;
     }
 
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
 
 
     // Now display all decisions in the solution
@@ -178,7 +177,16 @@ int main(int argc, char* argv[]) {
     int total_loss = compute_loss(inst, sol);
     log_inform << "Total loss: " << total_loss << std::endl;
 
-    log_inform << "Solution computed solution in " << duration.count() << " s." << std::endl; // \u33B2
+    std::chrono::duration<double> duration;
+    duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
+    if (duration.count() >= 5) {
+        log_inform << "Solution computed solution in " << duration.count() << " s." << std::endl;
+    }
+    else {
+        duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+        log_inform << "Solution computed solution in " << duration.count() << " \u33B2." << std::endl;
+    }
+
     // Check the validity of the solution
     if (check_validity(inst, sol)) {
         log_inform << "The solution is valid." << std::endl;
