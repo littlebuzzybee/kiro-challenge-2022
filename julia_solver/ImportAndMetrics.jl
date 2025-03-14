@@ -137,6 +137,6 @@ end
 
 
 windows_path = "C:/Users/matth/Documents/GitHub/kiro-challenge-2022/";
-linux_path   = "/home/matthias/Documents/GitHub/kiro-challenge-2022/";
+linux_path   = "/media/matthias/Work/GitHub/kiro-challenge-2022/";
 
 path = linux_path; # à changer selon la plateforme si besoin

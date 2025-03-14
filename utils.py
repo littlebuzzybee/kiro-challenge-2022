@@ -485,7 +485,7 @@ class Gurobi_Problem:
         self.m.optimize()
         
     def show_status(self):
-        sc = gurobipy.StatusConstClass
+        sc = gp.StatusConstClass
         status_codes = {sc.__dict__[k]: k for k, v in sc.__dict__.items() if isinstance(v, int)}
         print(f"Problem status: {status_codes[self.m.status]}\nObective value: {self.m.objVal}")
         
