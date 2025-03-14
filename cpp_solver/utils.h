@@ -1,7 +1,10 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <unordered_set>
+#include <unordered_map>
 #include <iostream>
+#include <boost/dynamic_bitset.hpp>
 #include "json.hpp"
 
 
@@ -46,6 +49,17 @@ struct Solution {
     // choice variables
     std::vector<int> machine_choice_tasks;
     std::vector<int> operator_choice_tasks;
+};
+
+struct ExplorationNode {
+    boost::dynamic_bitset<> available_machines;
+    boost::dynamic_bitset<> available_operators;
+    int overhead_tardiness_score; // total overhead score added by the node's decision variables
+    int nb_addressed_tasks; // number of tasks addressed by the node, that is, that are actually scheduled with a machine and an operator
+    int next_task_vec_idx; // integer pointer to the next index of the task vector to address; if > #tasks, the node is a terminal leaf
+    std::vector<int> assigned_tasks;
+    std::vector<int> chosen_machines; // task index -> machine index
+    std::vector<int> chosen_operators; // task index -> operator index
 };
 
 nlohmann::json read_json_file(std::string);

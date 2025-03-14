@@ -9,12 +9,13 @@
 #include <set>
 #include <map>
 #include <deque>
-#include <set>
-
-
-#include "gurobi_c++.h"
+#include <queue>
+#include <unordered_set>
+#include <unordered_map>
+#include <limits>
 #include "utils.h"
-
+#include "gurobi_c++.h"
+#include "breakdown.h"
 
 
 
@@ -40,5 +41,13 @@ void resolve_simple(
     std::map<int, std::deque<int>>&,
     std::ostream&
 );
+
+void resolve_traverse(
+    Instance&,
+    Solution&,
+    std::map<int, std::deque<int>>&,
+    std::ostream&
+);
+
 
 #endif

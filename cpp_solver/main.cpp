@@ -73,6 +73,9 @@ int main(int argc, char* argv[]) {
             else if (method == "heuristic") {
                 method_code = 2;
             }
+            else if (method == "heuristic_smart") {
+                method_code = 3;
+            }
             else {
                 std::cerr << "Invalid method provided." << std::endl;
                 exit(1);
@@ -152,6 +155,16 @@ int main(int argc, char* argv[]) {
     case 2:
         start = std::chrono::high_resolution_clock::now();
         resolve_simple(
+            inst,
+            sol,
+            job_stacks,
+            log_solve
+        );
+        stop = std::chrono::high_resolution_clock::now();
+        break;
+    case 3:
+        start = std::chrono::high_resolution_clock::now();
+        resolve_traverse(
             inst,
             sol,
             job_stacks,

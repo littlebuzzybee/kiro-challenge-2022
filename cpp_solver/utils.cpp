@@ -126,7 +126,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
 
 
     // Iterate over tasks, import and print details
-#pragma omp parallel for
+
     for (auto& task_descriptor : inst_descriptor["tasks"]) {
         // int task_id = task_descriptor["task"];
         // int task_idx = task_id - 1; // ids are offset by 1 in the JSON file
@@ -157,7 +157,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
         out_stream << "* possible supports: " << std::endl;
 
         for (auto& m : task_object.machines) {
-            out_stream << "  M" << m + 1 << " with O";
+            out_stream << "  - M" << m + 1 << " with O";
             print_set(task_object.compatibility[m], 1, out_stream);
             out_stream << std::endl;
         }
@@ -174,7 +174,7 @@ Instance import_instance(std::string filename, std::ostream& out_stream = std::c
 
     out_stream << std::endl;
     // Iterate over jobs, import and print details
-#pragma omp parallel for
+
     for (auto& job_descriptor : inst_descriptor["jobs"]) {
         int job_id = job_descriptor["job"];
         int job_idx = job_id - 1; // ids are offset by 1 in the JSON file
