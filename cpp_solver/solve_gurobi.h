@@ -1,5 +1,5 @@
-#ifndef SOLVE_H
-#define SOLVE_H
+#ifndef SOLVE_GUROBI_H
+#define SOLVE_GUROBI_H
 
 #include <iostream>
 #include <string>
@@ -34,20 +34,5 @@ void resolve_lookahead(
     std::ostream&,
     std::ostream&
 );
-
-void resolve_simple(
-    Instance&,
-    Solution&,
-    std::map<int, std::deque<int>>&,
-    std::ostream&
-);
-
-void resolve_traverse(
-    Instance&,
-    Solution&,
-    std::map<int, std::deque<int>>&,
-    std::ostream&
-);
-
 
 #endif

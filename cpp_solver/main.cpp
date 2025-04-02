@@ -13,8 +13,11 @@
 
 #include "gurobi_c++.h"
 #include "utils.h"
-#include "solve.h"
+#include "solve_gurobi.h"
+#include "solve_heuristic.h"
+#include "solve_ortools.h"
 #include "json.hpp"
+
 
 
 
@@ -168,7 +171,7 @@ int main(int argc, char* argv[]) {
             inst,
             sol,
             job_stacks,
-            log_solve
+            std::cout
         );
         stop = std::chrono::high_resolution_clock::now();
         break;

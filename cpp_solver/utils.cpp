@@ -235,7 +235,17 @@ int compute_loss(const Instance& inst, const Solution& sol) {
     return loss;
 }
 
-
+void print_job_stacks(const std::map<int, std::deque<int>>& job_stacks, std::ostream& log_stream) {
+    // Print the job stacks
+    log_stream << "Job stacks current state:" << std::endl;
+    for (auto& [j_idx, task_stack] : job_stacks) {
+        log_stream << "J" << j_idx + 1 << ": |";
+        for (int t_idx : task_stack) {
+            log_stream << "T" << t_idx + 1 << "|";
+        }
+        log_stream << std::endl;
+    }
+}
 
 // TODO: implement the check validity function
 
