@@ -1,5 +1,5 @@
-#ifndef SOLVE_HEURISTIC_H
-#define SOLVE_HEURISTIC_H
+#ifndef SOLVE_LINPROG_H
+#define SOLVE_LINPROG_H
 
 #include <iostream>
 #include <string>
@@ -14,14 +14,14 @@
 #include <unordered_map>
 #include <limits>
 #include "utils.h"
-#include "breakdown.h"
+#include "ortools/linear_solver/linear_solver.h"
+#include <memory>
+#include <cmath>
 
 
 
 
-
-
-void resolve_simple(
+void resolve_linprog(
     Instance&,
     Solution&,
     std::map<int, std::deque<int>>&,

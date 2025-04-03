@@ -14,8 +14,9 @@
 #include "gurobi_c++.h"
 #include "utils.h"
 #include "solve_gurobi.h"
-#include "solve_heuristic.h"
-#include "solve_ortools.h"
+#include "solve_greedy.h"
+#include "solve_linprog.h"
+#include "solve_traversal.h"
 #include "json.hpp"
 
 
@@ -73,11 +74,14 @@ int main(int argc, char* argv[]) {
             if (method == "solver") {
                 method_code = 1;
             }
-            else if (method == "heuristic") {
+            else if (method == "greedy") {
                 method_code = 2;
             }
-            else if (method == "heuristic_smart") {
+            else if (method == "linprog") {
                 method_code = 3;
+            }
+            else if (method == "traversal") {
+                method_code = 4;
             }
             else {
                 std::cerr << "Invalid method provided." << std::endl;
@@ -157,7 +161,7 @@ int main(int argc, char* argv[]) {
         break;
     case 2:
         start = std::chrono::high_resolution_clock::now();
-        resolve_simple(
+        resolve_greedy(
             inst,
             sol,
             job_stacks,
@@ -167,7 +171,17 @@ int main(int argc, char* argv[]) {
         break;
     case 3:
         start = std::chrono::high_resolution_clock::now();
-        resolve_traverse(
+        resolve_linprog(
+            inst,
+            sol,
+            job_stacks,
+            std::cout
+        );
+        stop = std::chrono::high_resolution_clock::now();
+        break;
+    case 4:
+        start = std::chrono::high_resolution_clock::now();
+        resolve_traversal(
             inst,
             sol,
             job_stacks,
@@ -206,6 +220,7 @@ int main(int argc, char* argv[]) {
     // Check the validity of the solution
     if (check_validity(inst, sol)) {
         log_inform << "The solution is valid." << std::endl;
+        sol.is_valid = true;
     }
     else {
         log_inform << "The solution is invalid." << std::endl;

@@ -49,6 +49,8 @@ struct Solution {
     // choice variables
     std::vector<int> machine_choice_tasks;
     std::vector<int> operator_choice_tasks;
+
+    bool is_valid{ false };
 };
 
 struct ExplorationNode {

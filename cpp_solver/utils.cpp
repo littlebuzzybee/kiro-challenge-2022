@@ -42,7 +42,6 @@ void print_sequence(std::vector<int> v, int offset, std::ostream& out_stream) {
 }
 
 
-
 void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream) {
     // Print column headers
     out_stream << "   ";

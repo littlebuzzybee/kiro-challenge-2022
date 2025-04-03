@@ -1,13 +1,13 @@
-#include "solve_ortools.h"
+#include "solve_traversal.h"
 
 
-void resolve_traverse(
+void resolve_traversal(
     Instance& inst,
     Solution& sol,
     std::map<int, std::deque<int>>& job_stacks,
     std::ostream& log_stream
 ) {
-    log_stream << "Beginning solving procedure with a BFS iterative heuristic..." << std::endl;
+    log_stream << "Beginning solving procedure with a decision tree based search heuristic..." << std::endl;
 
     // Display the job_stacks
     print_job_stacks(job_stacks, log_stream);
@@ -93,7 +93,7 @@ void resolve_traverse(
             }
             int t_idx = task_stack.front();
             int tardiness = std::max(0, time_pos + cumulative_remaining_time_per_job[j_idx] - inst.jobs[j_idx].due_date);
-            float score = inst.jobs[j_idx].weight * tardiness + 1.0; // Add 1 to avoid zero scores for linear programming; tends to even relative score discrepancies slightly
+            float score = std::sqrt(inst.jobs[j_idx].weight * tardiness + 1.0); // Add 1 to avoid zero scores for linear programming; tends to even relative score discrepancies slightly
             // the higher the score, the higher the priority to avoid accumulation of tardiness
             candidate_tasks.emplace_back(std::make_tuple(score, t_idx));
         }
@@ -114,118 +114,123 @@ void resolve_traverse(
         }
         log_stream << " }" << std::endl;
 
-        // ====== Create the GLOP solver ======
-        std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("GLOP"));
-        if (!solver) {
-            log_stream << "Solver not created. Exiting..." << std::endl;
-            return;
+
+        // ====== Create the initial node for the BFS: ======
+        // For each task, we will explore the possible assignments of machines and operators. Some tasks may be addressable with several pairs (M, O) and we explore them all so that we may be able to minimize the overhead added tardiness score this round
+        ExplorationNode initial_node;
+
+        // Copy the available resources as dynamic bitsets to use in the nodes of the tree traversal 
+        initial_node.available_machines = boost::dynamic_bitset<>(inst.nb_machines);
+        initial_node.available_operators = boost::dynamic_bitset<>(inst.nb_operators);
+        initial_node.available_machines.reset();
+        initial_node.available_operators.reset();
+        for (int m_idx : available_machines) {
+            initial_node.available_machines.set(m_idx, true);
+        }
+        for (int o_idx : available_operators) {
+            initial_node.available_operators.set(o_idx, true);
         }
 
-        // ====== Create decision variables ======
-        // Only one decision variable per exact combination (task, machine, operator) is created
+        // We start with the first task in the stack whatever happens
+        initial_node.next_task_vec_idx = 0;
+        initial_node.nb_addressed_tasks = 0;
+        initial_node.overhead_tardiness_score = 0;
+        initial_node.assigned_tasks = std::vector<int>();
+        initial_node.chosen_machines = std::vector<int>();
+        initial_node.chosen_operators = std::vector<int>();
+
+        // Create the first node of the exploration tree
+        std::deque<ExplorationNode> node_queue{};
+        node_queue.emplace_back(initial_node);
 
 
-        std::map<int, std::vector<operations_research::MPVariable*>> tasks_assignments_vars{}; // task -> vector of assignment variables for a given (Task, Machine, Operator)
-        std::map<int, std::vector<std::tuple<int, int>>> tasks_assignments{}; // task -> tuple of (machine, operator) for the assignment
-        std::map<int, operations_research::MPConstraint*> tasks_assignments_constr{}; // task -> constraint on the number of assignments addressing it
-        std::map<int, operations_research::MPConstraint*> machines_assignments_constr{}; // machine -> constraint on the number of assignments using it
-        std::map<int, operations_research::MPConstraint*> operators_assignments_constr{}; // operator -> constraint on the number of assignments using it
+        int current_best_overhead_score = std::numeric_limits<int>::max();
+
+        ExplorationNode best_node{}; // copy of the current best node in the exploration tree
 
 
+        // ====== Perform BFS exploration of the tree ======
 
-        for (auto& [_, t_idx] : candidate_tasks) {
-            tasks_assignments_constr[t_idx] = solver->MakeRowConstraint(
-                0.0,
-                1.0
-            ); // Exlude the task from being assigned several times by different resources (op, ma)
+        while (!node_queue.empty()) {
+            ExplorationNode node = node_queue.front();
+            node_queue.pop_front();
 
+            // LEAF (TERMINAL CASE)
+            if (node.next_task_vec_idx >= static_cast<int>(candidate_tasks.size())) {
+                // the node is a leaf, we must compare it to the current best solution and update it if necessary
+                if (node.overhead_tardiness_score < current_best_overhead_score) {
+                    current_best_overhead_score = node.overhead_tardiness_score;
+                    best_node = node;
+                }
+                else if (node.overhead_tardiness_score == current_best_overhead_score && node.nb_addressed_tasks > best_node.nb_addressed_tasks) {
+                    best_node = node;
+                }
+                continue;
+            }
 
-            for (auto& [m_idx, op_list] : inst.tasks[t_idx].compatibility) {
-                if (!available_machines.contains(m_idx)) { continue; }
+            // NODE (NON-TERMINAL CASE)
+            std::tuple<float, int>& processed_task = candidate_tasks[node.next_task_vec_idx];
+            int t_idx = std::get<1>(processed_task);
+            if (t_idx == 14 || t_idx == 17) {
+                int debug = 1;
+            }
 
-                for (auto& o_idx : op_list) {
-                    if (!available_operators.contains(o_idx)) { continue; }
+            bool task_can_be_assigned = false;
+            // Look for all pairs of operators and machines that can address the task
+            for (auto& m_idx : inst.tasks[t_idx].machines) {
+                if (!node.available_operators[m_idx]) {
+                    continue;
+                }
 
-                    tasks_assignments_vars[t_idx].emplace_back(
-                        solver->MakeIntVar(
-                            0.0,
-                            1.0,
-                            "T" + std::to_string(t_idx) + "_M" + std::to_string(m_idx) + "_O" + std::to_string(o_idx)
-                        ) // Binary variable for the assignment of a given task to a machine and an operator
-                    );
-                    tasks_assignments[t_idx].emplace_back(std::make_tuple(m_idx, o_idx));
-
-                    tasks_assignments_constr[t_idx]->SetCoefficient(tasks_assignments_vars[t_idx].back(), 1.0);
-
-                    if (!machines_assignments_constr.contains(m_idx)) {
-                        machines_assignments_constr[m_idx] = solver->MakeRowConstraint(
-                            0.0,
-                            1.0
-                        ); // Exclude the machine from being assigned several times to one given task
+                for (auto& o_idx : inst.tasks[t_idx].compatibility[m_idx]) {
+                    if (!node.available_operators[o_idx]) {
+                        continue;
                     }
-                    if (!operators_assignments_constr.contains(o_idx)) {
-                        operators_assignments_constr[o_idx] = solver->MakeRowConstraint(
-                            0.0,
-                            1.0
-                        ); // Exclude the operator from being assigned several times to one given task
-                    }
-
-                    machines_assignments_constr[m_idx]->SetCoefficient(tasks_assignments_vars[t_idx].back(), 1.0);
-                    operators_assignments_constr[o_idx]->SetCoefficient(tasks_assignments_vars[t_idx].back(), 1.0);
+                    task_can_be_assigned = true;
+                    // We can assign the task to the operator and machine
+                    // copy the parent node, and update its fields afterwards
+                    ExplorationNode child_node = node;
+                    child_node.available_operators.set(o_idx, false);
+                    child_node.available_machines.set(m_idx, false);
+                    child_node.assigned_tasks.emplace_back(t_idx);
+                    child_node.chosen_operators.emplace_back(o_idx);
+                    child_node.chosen_machines.emplace_back(m_idx);
+                    child_node.nb_addressed_tasks++;
+                    child_node.next_task_vec_idx++;
+                    // Emplace the child node in the queue for further exploration
+                    node_queue.emplace_back(child_node);
+                    // log_stream << "T" << t_idx + 1 << "[M" << m_idx + 1 << "+O" << o_idx + 1 << "][p" << node.next_task_vec_idx << "]::";
                 }
             }
-        }
+            // log_stream << std::endl;
 
-
-
-        // ====== Create the objective function ======
-        operations_research::MPObjective* const objective = solver->MutableObjective();
-
-        for (auto& [score, t_idx] : candidate_tasks) {
-            for (auto& var : tasks_assignments_vars[t_idx]) {
-                // The objective function is to maximize the sum of the scores of the tasks that are addressed
-                objective->SetCoefficient(var, score);
-            }
-        }
-        objective->SetMaximization();
-
-        log_stream << "Number of constraints = " << solver->NumConstraints() << std::endl;
-        log_stream << "Number of variables = " << solver->NumVariables() << std::endl;
-        const operations_research::MPSolver::ResultStatus result_status = solver->Solve();
-
-        // Check that the problem has an optimal solution.
-        if (result_status != operations_research::MPSolver::FEASIBLE && result_status != operations_research::MPSolver::OPTIMAL) {
-            log_stream << "The problem does not have a feasible or optimal solution!" << std::endl;
-        }
-
-        log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations" << std::endl;
-        log_stream << "Objective value = " << objective->Value() << std::endl;
-
-
-        std::map <int, std::tuple<int, int>> tasks_chosen_resources{};
-        for (auto& [t_idx, candidate_resources] : tasks_assignments) {
-            for (size_t i = 0; i < candidate_resources.size(); ++i) {
-                operations_research::MPVariable* var = tasks_assignments_vars[t_idx][i];
-                if (var->solution_value() > 0.5) {
-                    tasks_chosen_resources[t_idx] = candidate_resources[i];
-                }
+            if (!task_can_be_assigned) {
+                // The task cannot be assigned to any machine or operator, we skip it and create a branch for that scenario
+                ExplorationNode child_node = node;
+                int parent_job = inst.tasks[t_idx].job_parent;
+                // recompute the tardiness contribution score for the job of that skipped task with postponed processing by 1 time unit
+                child_node.overhead_tardiness_score += inst.jobs[parent_job].weight * std::max(0, 1 + time_pos + cumulative_remaining_time_per_job[parent_job] - inst.jobs[parent_job].due_date);
+                child_node.next_task_vec_idx++;
+                node_queue.emplace_back(child_node);
             }
         }
 
 
-        log_stream << "Best solution assigns " << tasks_chosen_resources.size() << " task(s): { ";
-        for (auto & [t_idx, resources] : tasks_chosen_resources) {
-            log_stream << "T" << t_idx + 1 << " ";
+        // We have explored all the nodes of the tree, we can now assign the best node to the solution;
+        // that is the one that was found to minimize the overhead tardiness score
+        log_stream << "Best node assigns " << best_node.nb_addressed_tasks << " task(s): { ";
+        for (int idx = 0; idx < static_cast<int>(best_node.assigned_tasks.size()); ++idx) {
+            log_stream << "T" << best_node.assigned_tasks[idx] + 1 << " ";
         }
-        log_stream << "} with registered overhead tardiness score " << objective->Value() << std::endl;
+        log_stream << "} with overhead score " << best_node.overhead_tardiness_score << std::endl;
 
-
-        for (auto & [t_idx, resources] : tasks_chosen_resources) {
+        for (int idx = 0; idx < static_cast<int>(best_node.assigned_tasks.size()); ++idx) {
+            int t_idx = best_node.assigned_tasks[idx];
             int j_idx = inst.tasks[t_idx].job_parent;
-            int chosen_machine = std::get<0>(resources);
-            int chosen_operator = std::get<1>(resources);
 
             // Assign the workers to the task
+            int chosen_machine = best_node.chosen_machines[idx];
+            int chosen_operator = best_node.chosen_operators[idx];
             sol.machine_choice_tasks[t_idx] = chosen_machine;
             sol.operator_choice_tasks[t_idx] = chosen_operator;
 
@@ -248,7 +253,6 @@ void resolve_traverse(
             job_stacks[j_idx].pop_front();
             log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << std::endl;
         }
-        // FORMER CODE GOES HERE
         time_pos++;
     }
     log_stream << std::endl << "End of solving procedure." << std::endl << std::endl;

@@ -251,11 +251,6 @@ void resolve_lookahead(
             cumulative_remaining_time_per_job
         );
 
-
-
-
-
-
         // Set and declare the objective function
         log_stream << "Setting objective function..." << std::endl;
         set_objective_function(

@@ -47,7 +47,7 @@ simple: scheduler
 SRC_DIR = cpp_solver
 BIN_DIR = $(SRC_DIR)/objects
 
-SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve_gurobi.cpp $(SRC_DIR)/solve_heuristic.cpp $(SRC_DIR)/solve_ortools.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/breakdown.cpp 
+SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve_gurobi.cpp $(SRC_DIR)/solve_greedy.cpp $(SRC_DIR)/solve_linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/breakdown.cpp $(SRC_DIR)/solve_traversal.cpp
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
 
 

@@ -1,21 +1,21 @@
-#include "solve_heuristic.h"
+#include "solve_greedy.h"
 
 
-void resolve_simple(
+void resolve_greedy(
     Instance& inst,
     Solution& sol,
     std::map<int, std::deque<int>>& job_stacks,
     std::ostream& log_stream
 ) {
 
-    log_stream << "Beginning solving procedure with an elementary iterative heuristic..." << std::endl;
+    log_stream << "Beginning solving procedure with an elementary greedy iterative heuristic..." << std::endl;
 
     int time_cursor{ 0 };
     // Print the job stacks
     print_job_stacks(job_stacks, log_stream);
 
-    std::set<int> available_machines;
-    std::set<int> available_operators;
+    std::set<int> available_machines{};
+    std::set<int> available_operators{};
 
     // Create a pool of resources
     for (int m_idx = 0; m_idx < inst.nb_machines; ++m_idx) {
@@ -26,10 +26,10 @@ void resolve_simple(
     }
 
     // Create data structures for the release of resources by key time position
-    std::map<int, std::set<int>> release_calendar_machines;
-    std::map<int, std::set<int>> release_calendar_operators;
+    std::map<int, std::set<int>> release_calendar_machines{};
+    std::map<int, std::set<int>> release_calendar_operators{};
 
-    // Create a data structure to enforce the precedence
+    // Create a data structure to enforce the precedence by remembering when to pursue the next task of a job
     std::map<int, int> next_time_persue_job;
     for (int j_idx = 0; j_idx < inst.nb_jobs; ++j_idx) {
         next_time_persue_job[j_idx] = inst.jobs[j_idx].release_date;
@@ -99,7 +99,7 @@ void resolve_simple(
             task_queue.pop();
             int j_idx = inst.tasks[t_idx].job_parent;
 
-            // Compute intersection of available machines and authorized machines fot that task
+            // Compute intersection of available machines and authorized machines for that task
             // POSSIBLE = AVAILABLE INTERSECT AUTHORIZED
             std::vector<int> possible_machines;
             std::set<int>& authorized_machines = inst.tasks[t_idx].machines;
