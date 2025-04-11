@@ -22,7 +22,7 @@ LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE) -L$(ORTOOLS_LIB)
 
 
 # Library linking
-LDLIBS = -lgurobi_c++ -lgurobi120 -ltbb -lpthread -lstdc++fs -lortools # -larmadillo
+LDLIBS = -lgurobi_c++ -lgurobi120 -ltbb -lpthread -lstdc++fs -lortools -llapack -lblas -larmadillo
 
 
 

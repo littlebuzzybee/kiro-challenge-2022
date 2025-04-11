@@ -34,19 +34,14 @@ void resolve_traversal(
         next_time_persue_job[j_idx] = inst.jobs[j_idx].release_date;
     }
 
+    // Compute the cumulative remaining time for each job
     std::map<int, int> cumulative_remaining_time_per_job;
-    for (auto& [j_idx, _] : job_stacks) {
-        std::deque<int>& remaining_tasks_sequence = job_stacks[j_idx];
-        int total_processing_time = std::reduce(
-            remaining_tasks_sequence.begin(),
-            remaining_tasks_sequence.end(),
-            0, // Initial value of the sum
-            [&inst](int total_sum, int t_idx) {
-                return total_sum + inst.tasks[t_idx].processing_time;
-            }
-        );
-        cumulative_remaining_time_per_job[j_idx] = total_processing_time;
-    }
+    get_cumulative_remaining_time_per_job(
+        cumulative_remaining_time_per_job,
+        inst,
+        job_stacks,
+        next_time_persue_job
+    );
 
     int time_pos{ 0 };
 
@@ -80,23 +75,21 @@ void resolve_traversal(
         }
         log_stream << std::endl;
 
-        // ====== Organize the tasks to be processed per order of proority ======
+        // ====== Organize the tasks to be processed per order of priority ======
         // We insert the tasks that are ready to be processed from the job stacks into in a new priority queue to be ranked and compared
         // There is at most only one task addressed for each job in the queue and we decide which of them are going to be processed at this time position to minimize the upcoming tardiness score with a BFS exploration 
 
         // Create a vector of candidate tasks indexes to be processed, and sort them by priority
         std::vector<std::tuple<float, int>> candidate_tasks{}; // first integer is the tardiness score, second integer is the task index
-        for (auto& [j_idx, task_stack] : job_stacks) {
-            // Insert the first task in line for the job if it exists and if the processing time of its predecessor is over
-            if (task_stack.empty() || time_pos < next_time_persue_job[j_idx]) {
-                continue;
-            }
-            int t_idx = task_stack.front();
-            int tardiness = std::max(0, time_pos + cumulative_remaining_time_per_job[j_idx] - inst.jobs[j_idx].due_date);
-            float score = std::sqrt(inst.jobs[j_idx].weight * tardiness + 1.0); // Add 1 to avoid zero scores for linear programming; tends to even relative score discrepancies slightly
-            // the higher the score, the higher the priority to avoid accumulation of tardiness
-            candidate_tasks.emplace_back(std::make_tuple(score, t_idx));
-        }
+        get_sort_tasks_and_scores(
+            candidate_tasks,
+            inst,
+            job_stacks,
+            cumulative_remaining_time_per_job,
+            next_time_persue_job,
+            time_pos
+        );
+
 
         if (candidate_tasks.empty()) {
             log_stream << "No candidate tasks to process at this time position. Continuing." << std::endl;

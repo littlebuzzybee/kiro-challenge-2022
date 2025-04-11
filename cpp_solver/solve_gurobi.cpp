@@ -187,39 +187,6 @@ void resolve_lookahead(
             processed_tasks
         );
 
-
-        // Warm up the solution with the greedy search's results
-        warmup_solution(
-            inst,
-            sol,
-            processed_tasks,
-            assigned_operators_per_task,
-            assigned_machines_per_task,
-            begin_times_tasks_per_job
-        );
-
-
-        // Set the assignments physical overlap constraints
-        log_stream << "Setting workers physical overlap constraints..." << std::endl;
-        set_workers_uniqueness_constraints(
-            inst,
-            model,
-            assigned_operators_per_task,
-            assigned_machines_per_task,
-            processed_tasks
-        );
-
-        // Set the OP-MA assignments compatibility constraints
-        log_stream << "Setting workers OP-MA compatibility constraints..." << std::endl;
-        // These constraints are redundant but might help with constraint propagation, I guess
-        set_workers_ubiquity_constraints(
-            inst,
-            model,
-            assigned_operators_per_task,
-            assigned_machines_per_task,
-            processed_tasks
-        );
-
         // Set the assignments time overlap constraints
         log_stream << "Setting assignments time overlap constraints..." << std::endl;
         set_workers_time_exclusion_constraints(
@@ -251,6 +218,29 @@ void resolve_lookahead(
             cumulative_remaining_time_per_job
         );
 
+
+        // Set the assignments physical overlap constraints
+        log_stream << "Setting workers physical overlap constraints..." << std::endl;
+        set_workers_uniqueness_constraints(
+            inst,
+            model,
+            assigned_operators_per_task,
+            assigned_machines_per_task,
+            processed_tasks
+        );
+
+        // Set the OP-MA assignments compatibility constraints
+        log_stream << "Setting workers OP-MA compatibility constraints..." << std::endl;
+        // These constraints are redundant but might help with constraint propagation, I guess
+        set_workers_ubiquity_constraints(
+            inst,
+            model,
+            assigned_operators_per_task,
+            assigned_machines_per_task,
+            processed_tasks
+        );
+
+
         // Set and declare the objective function
         log_stream << "Setting objective function..." << std::endl;
         set_objective_function(
@@ -262,6 +252,16 @@ void resolve_lookahead(
             unit_penalties
         );
         log_stream << std::endl;
+
+        // Warm up the solution with the greedy search's results
+        warmup_solution(
+            inst,
+            sol,
+            processed_tasks,
+            assigned_operators_per_task,
+            assigned_machines_per_task,
+            begin_times_tasks_per_job
+        );
 
 
         if (write_problem_file) {

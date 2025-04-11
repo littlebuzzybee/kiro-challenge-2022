@@ -23,7 +23,9 @@
 
 
 
+
 int main(int argc, char* argv[]) {
+
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <instance_filename> <options>" << std::endl;
         return 1;
@@ -93,11 +95,11 @@ int main(int argc, char* argv[]) {
 
 
     std::ofstream log_solve("./log_solve.log");
-    std::ofstream log_import("./log_import.log");
+    // std::ofstream log_import("./log_import.log");
     std::ostream& log_inform = std::cout;
 
 
-    Instance inst = import_instance(instance_filename, log_import);
+    Instance inst = import_instance(instance_filename, log_solve);
 
     // Fill the jobs stacks with the tasks
     std::map<int, std::deque<int>> job_stacks;
@@ -175,7 +177,7 @@ int main(int argc, char* argv[]) {
             inst,
             sol,
             job_stacks,
-            std::cout
+            log_solve
         );
         stop = std::chrono::high_resolution_clock::now();
         break;
@@ -185,7 +187,7 @@ int main(int argc, char* argv[]) {
             inst,
             sol,
             job_stacks,
-            std::cout
+            log_solve
         );
         stop = std::chrono::high_resolution_clock::now();
         break;
@@ -227,7 +229,7 @@ int main(int argc, char* argv[]) {
     }
 
     log_solve.close();
-    log_import.close();
+    // log_import.close();
     return 0;
 }
 

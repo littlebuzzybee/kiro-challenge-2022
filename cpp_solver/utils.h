@@ -2,9 +2,18 @@
 #define UTILS_H
 
 #include <unordered_set>
+#include <string>
+#include <vector>
+#include <set>
+#include <map>
+#include <deque>
 #include <unordered_map>
 #include <iostream>
 #include <boost/dynamic_bitset.hpp>
+#include <iostream>
+#include <fstream>
+#include <cstdlib>
+#include <armadillo>
 #include "json.hpp"
 
 
@@ -66,12 +75,39 @@ struct ExplorationNode {
 
 nlohmann::json read_json_file(std::string);
 Instance import_instance(std::string, std::ostream&);
+
 void print_set(std::set<int>, int, std::ostream&);
+
 void print_sequence(std::vector<int>, int, std::ostream&);
+
 void display_cstr_matrix(std::map<int, std::map<int, int>>&, std::ostream&);
+
 void displayMatrix(const std::map<int, std::map<int, int>>&, std::ostream&);
+
 bool all_stacks_are_empty(const std::map<int, std::deque<int>>&);
+
+void get_sort_tasks_and_scores(
+    std::vector<std::tuple<float, int>>&,
+    Instance&,
+    std::map<int, std::deque<int>>&,
+    std::map<int, int>&,
+    std::map<int, int>&,
+    int
+);
+
+void get_cumulative_remaining_time_per_job(
+    std::map<int, int>&,
+    Instance&,
+    std::map<int, std::deque<int>>&,
+    std::map<int, int>&
+);
+
 int compute_loss(const Instance&, const Solution&);
+
 void print_job_stacks(const std::map<int, std::deque<int>>& job_stacks, std::ostream& log_stream);
+
 bool check_validity(const Instance&, const Solution&);
+
+void node_analysis(const ExplorationNode&, const Instance&, const Solution&);
+
 #endif

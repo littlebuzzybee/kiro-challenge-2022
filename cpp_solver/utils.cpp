@@ -1,15 +1,4 @@
-#include <iostream>
-#include <string>
-#include <vector>
-#include <set>
-#include <map>
-#include <deque>
-#include <fstream>
-#include <cstdlib>
 #include "utils.h"
-#include "json.hpp"
-#include <omp.h>
-
 
 nlohmann::json read_json_file(std::string filename) {
     std::ifstream f(filename);
@@ -219,6 +208,53 @@ bool all_stacks_are_empty(const std::map<int, std::deque<int>>& stacks) {
     return true;
 }
 
+
+
+void get_sort_tasks_and_scores(
+    std::vector<std::tuple<float, int>>& candidate_tasks,
+    Instance& inst,
+    std::map<int, std::deque<int>>& job_stacks,
+    std::map<int, int>& cumulative_remaining_time_per_job,
+    std::map<int, int>& next_time_persue_job,
+    int time_pos
+) {
+    for (auto& [j_idx, task_stack] : job_stacks) {
+        // Insert the first task in line for the job if it exists and if the processing time of its predecessor is over
+        if (task_stack.empty() || time_pos < next_time_persue_job[j_idx]) {
+            continue;
+        }
+        int t_idx = task_stack.front();
+        int overhead = time_pos + cumulative_remaining_time_per_job[j_idx] - inst.jobs[j_idx].due_date;
+        int tardiness = std::max(0, overhead);
+        float score = std::sqrt(inst.jobs[j_idx].weight * tardiness + 1.0); // Add 1 to avoid zero scores for linear programming; square root tends to even relative score discrepancies slightly
+        // the higher the score, the higher the priority to avoid accumulation of tardiness
+        candidate_tasks.emplace_back(std::make_tuple(score, t_idx));
+    }
+
+    // Sort the candidate tasks by highest priority to get the most urgent tasks first (those with the highest tardiness score so far)
+    std::sort(candidate_tasks.begin(), candidate_tasks.end(), std::greater<std::tuple<float, int>>());
+}
+
+
+void get_cumulative_remaining_time_per_job(
+    std::map<int, int>& cumulative_remaining_time_per_job,
+    Instance& inst,
+    std::map<int, std::deque<int>>& job_stacks,
+    std::map<int, int>& next_time_persue_job
+) {
+    for (auto& [j_idx, j_queue] : job_stacks) {
+        int total_processing_time = std::reduce(
+            j_queue.begin(),
+            j_queue.end(),
+            0, // Initial value of the sum
+            [&inst](int total_sum, int t_idx) {
+                return total_sum + inst.tasks[t_idx].processing_time;
+            }
+        );
+        cumulative_remaining_time_per_job[j_idx] = total_processing_time;
+    }
+}
+
 int compute_loss(const Instance& inst, const Solution& sol) {
     int loss = 0;
 
@@ -245,8 +281,6 @@ void print_job_stacks(const std::map<int, std::deque<int>>& job_stacks, std::ost
         log_stream << std::endl;
     }
 }
-
-// TODO: implement the check validity function
 
 bool check_validity(const Instance& inst, const Solution& sol) {
 
@@ -313,4 +347,83 @@ bool check_validity(const Instance& inst, const Solution& sol) {
         busy_operators.clear();
     }
     return true;
+}
+
+
+void node_analysis(const ExplorationNode& node, const Instance& inst, const Solution& sol) {
+    int nb_machines = static_cast<int>(node.available_machines.count());
+    int nb_operators = static_cast<int>(node.available_operators.count());
+    int nb_tasks = static_cast<int>(node.assigned_tasks.size());
+
+    // Detect whether or not the problem is overconstrained (i.e. if there are more tasks than machines or operators)
+    int ma_deficit = std::max(0, nb_tasks - nb_machines);
+    int op_deficit = std::max(0, nb_tasks - nb_operators);
+
+
+    // Laplacian of overlapping resources
+    arma::fmat tasks_ma_laplacian(nb_tasks, nb_tasks, arma::fill::zeros);
+    arma::fmat tasks_op_laplacian(nb_tasks, nb_tasks, arma::fill::zeros);
+
+    // Number of overlapping resources
+    arma::Mat<float> tasks_ma_overlap = arma::zeros<arma::Mat<float>>(nb_tasks, nb_tasks);
+    arma::Mat<float> tasks_op_overlap = arma::zeros<arma::Mat<float>>(nb_tasks, nb_tasks);
+
+    // Assemble adjacency and laplacian matrices
+    
+    for (int i = 0; i < nb_tasks; i++) {
+        int t1_idx = node.assigned_tasks[i];
+
+        int adjacency_degree_ma = 0;
+        int adjacency_degree_op = 0;
+
+        for (int j = i + 1; j < nb_tasks; j++) {
+            int t2_idx = node.assigned_tasks[j];
+
+            std::vector<int> common_machines{};
+            std::set_intersection(
+                inst.tasks[t1_idx].machines.begin(),
+                inst.tasks[t1_idx].machines.end(),
+                inst.tasks[t2_idx].machines.begin(),
+                inst.tasks[t2_idx].machines.end(),
+                std::back_inserter(common_machines)
+            );
+
+            std::vector<int> common_operators{};
+            std::set_intersection(
+                inst.tasks[t1_idx].machines.begin(),
+                inst.tasks[t1_idx].machines.end(),
+                inst.tasks[t2_idx].machines.begin(),
+                inst.tasks[t2_idx].machines.end(),
+                std::back_inserter(common_operators)
+            );
+
+            // Upper triangular part
+            tasks_ma_overlap(i, j) = static_cast<float>(common_machines.size());
+            tasks_op_overlap(i, j) = static_cast<float>(common_operators.size());
+            tasks_ma_laplacian(i, j) = common_machines.size() > 0 ? -1.0f : 0.0f;
+            tasks_op_laplacian(i, j) = common_operators.size() > 0 ? -1.0f : 0.0f;
+            // Lower triangular part
+            tasks_ma_overlap(j, i) = tasks_ma_overlap(i, j);
+            tasks_op_overlap(j, i) = tasks_ma_overlap(i, j);
+            tasks_ma_laplacian(j, i) = tasks_ma_laplacian(i, j);
+            tasks_op_laplacian(j, i) = tasks_op_laplacian(i, j);
+
+            adjacency_degree_ma += common_machines.size() > 0 ? -1 : 0;
+            adjacency_degree_op += common_machines.size() > 0 ? -1 : 0;
+        }
+
+        // Diagonal part
+        tasks_ma_overlap(i, i) = static_cast<float>(adjacency_degree_ma);
+        tasks_op_overlap(i, i) = static_cast<float>(adjacency_degree_op);
+    }
+    
+
+    arma::fmat U;
+    arma::fvec s;
+    arma::fmat V;
+
+    arma::svd(U, s, V, tasks_ma_laplacian);
+
+
+
 }

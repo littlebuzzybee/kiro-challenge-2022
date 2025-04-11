@@ -572,7 +572,8 @@ void set_completion_time_and_penalty_constraints(
 
     // Set unit penalty constraints
     for (int job_idx : processed_jobs) {
-        // completion_time > due_date => unit_penalty = 1
+        // [completion_time > due_date] => [unit_penalty = 1]
+        // [unit_penalty = 0] => [completion_time <= due_date] i.e. tardiness_slack <= 0
         model.addGenConstrIndicator(
             unit_penalties[job_idx],
             0, // false
