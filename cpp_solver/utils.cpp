@@ -98,8 +98,8 @@ void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream
     }
 }
 
-Instance import_instance(std::string filename, std::ostream& out_stream = std::cout) {
-    nlohmann::json inst_descriptor = read_json_file(filename);
+Instance import_instance(std::filesystem::path filename, std::ostream& out_stream = std::cout) {
+    nlohmann::json inst_descriptor = read_json_file(filename.string());
 
     Instance inst_object;
 

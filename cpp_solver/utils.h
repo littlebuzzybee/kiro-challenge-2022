@@ -14,6 +14,8 @@
 #include <fstream>
 #include <cstdlib>
 #include <armadillo>
+#include <filesystem>
+#include <iomanip>
 #include "json.hpp"
 
 
@@ -74,7 +76,7 @@ struct ExplorationNode {
 };
 
 nlohmann::json read_json_file(std::string);
-Instance import_instance(std::string, std::ostream&);
+Instance import_instance(std::filesystem::path, std::ostream&);
 
 void print_set(std::set<int>, int, std::ostream&);
 

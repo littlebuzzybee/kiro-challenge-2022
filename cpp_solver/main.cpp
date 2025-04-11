@@ -18,6 +18,7 @@
 #include "solve_linprog.h"
 #include "solve_traversal.h"
 #include "json.hpp"
+#include "CLI/CLI.hpp"
 
 
 
@@ -25,72 +26,82 @@
 
 
 int main(int argc, char* argv[]) {
-
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <instance_filename> <options>" << std::endl;
-        return 1;
-    }
-
-
-    // Detect flags
-    // Detect --writeproblemfile flag
+    std::string greetings = "================ Kiro 2022 Solver ================\n"
+        "       A solver for the Kiro 2022 problem\n"
+        "      with several algorithms to choose from.\n"
+        "==================================================";
+    CLI::App app{ greetings };
 
 
+    std::filesystem::path instance_filename;
+    CLI::Option* ifo = app.add_option("-f,--file", instance_filename, "The JSON instance file to read from and solve");
+    ifo->required();
+    ifo->check(CLI::ExistingFile.description("File must exist").active(false).name("file"));
 
-    // Import instance
-    std::string instance_filename = argv[1];
+    bool write_problem_file{ false };
+    app.add_flag("-w,--write_solution", write_problem_file, "Write problem solution to file");
 
-    double time_limit = 30.0;
-    int lookahead_duration = 5;
+    double solver_time_limit;
+    CLI::Option* stl = app.add_option("-t,--time_limit", solver_time_limit, "Time limit for each of Gurobi's steps in seconds");
+    stl->default_val(30.0);
+    stl->check(CLI::Number.description("Time limit must be a number").active(false).name("type"));
+    stl->check(CLI::PositiveNumber.description("Time limit must be positive").active(false).name("sign"));
+    stl->get_validator("type")->active();
+    stl->get_validator("sign")->active();
+
+    int lookahead_duration;
+    CLI::Option* lad = app.add_option("-l,--lookahead", lookahead_duration, "Lookahead duration in seconds");
+    lad->default_val(5);
+    lad->check(CLI::Number.description("Lookahead duration must be a number").active(false).name("type"));
+    lad->check(CLI::PositiveNumber.description("Lookahead duration must be positive").active(false).name("sign"));
+    lad->get_validator("type")->active();
+    lad->get_validator("sign")->active();
+
     bool report_all_decisions = false;
-    int max_threads = 3;
-    bool write_problem_file = false;
+    app.add_flag("-r,--report_all_decisions", report_all_decisions, "Report all decisions made by the solver");
+
+    int gurobi_max_threads;
+    CLI::Option* gto = app.add_option("-g,--gurobi_threads", gurobi_max_threads, "Number of threads for Gurobi solver");
+    gto->default_val(3);
+    gto->check(CLI::Number.description("Number of threads must be a number").active(false).name("type"));
+    gto->check(CLI::PositiveNumber.description("Number of threads must be positive").active(false).name("sign"));
+    gto->get_validator("type")->active();
+    gto->get_validator("sign")->active();
+
+
+    std::string method;
+    CLI::Option* mth = app.add_option("-m,--method", method, "Method to use for solving the problem");
+    mth->required();
+    mth->check(CLI::IsMember({ "solver", "greedy", "linprog", "traversal" }, CLI::ignore_case).description("Method must be one of: solver, greedy, linprog, traversal").active(false).name("method"));
+    mth->get_validator("method")->active();
+
+
+
+    app.footer("Kiro 2022 Solver - A solver for the Kiro 2022 problem");
+    CLI11_PARSE(app, argc, argv);
+
+
     int method_code = 2;
 
 
-    for (int i = 2; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg.find("--gurobi_threads=") == 0) {
-            std::string value = arg.substr(17);
-            max_threads = std::stoi(value);
-            assert(max_threads > 0);
-        }
-        if (arg.find("--time_limit=") == 0) {
-            std::string value = arg.substr(13);
-            time_limit = std::stod(value);
-            assert(time_limit > 0);
-        }
-        if (arg.find("--lookahead=") == 0) {
-            std::string value = arg.substr(12);
-            lookahead_duration = std::stoi(value);
-            assert(lookahead_duration > 0);
-        }
-        if (arg.find("--write_problem_file") == 0) {
-            write_problem_file = true;
-        }
-        if (arg.find("--report_all_decisions") == 0) {
-            report_all_decisions = true;
-        }
-        if (arg.find("--method=") == 0) {
-            std::string method = arg.substr(9);
-            if (method == "solver") {
-                method_code = 1;
-            }
-            else if (method == "greedy") {
-                method_code = 2;
-            }
-            else if (method == "linprog") {
-                method_code = 3;
-            }
-            else if (method == "traversal") {
-                method_code = 4;
-            }
-            else {
-                std::cerr << "Invalid method provided." << std::endl;
-                exit(1);
-            }
-        }
+    // Define the mapping
+    std::map<std::string, int> method_map = {
+        { "solver", 1 },
+        { "greedy", 2 },
+        { "linprog", 3 },
+        { "traversal", 4 }
+    };
+
+    // Look up the method code
+    auto it = method_map.find(method);
+    if (it != method_map.end()) {
+        method_code = it->second;
     }
+    else {
+        std::cerr << "Invalid method provided." << std::endl;
+        exit(1);
+    }
+
 
 
 
@@ -157,7 +168,7 @@ int main(int argc, char* argv[]) {
         start = std::chrono::high_resolution_clock::now();
         resolve_lookahead(
             inst, sol, job_stacks, pending_tasks_per_job,
-            lookahead_duration, time_limit, max_threads, write_problem_file, report_all_decisions, log_solve, log_inform
+            lookahead_duration, solver_time_limit, gurobi_max_threads, write_problem_file, report_all_decisions, log_solve, log_inform
         );
         stop = std::chrono::high_resolution_clock::now();
         break;
