@@ -104,6 +104,20 @@ void get_cumulative_remaining_time_per_job(
     std::map<int, int>&
 );
 
+void fill_job_stacks_and_compute_time(
+    Instance&,
+    std::map<int, std::deque<int>>&,
+    std::vector<int>&
+);
+
+void release_idle_resources(
+    int,
+    std::set<int>&,
+    std::set<int>&,
+    const std::set<int>&,
+    const std::set<int>&
+);
+
 int compute_loss(const Instance&, const Solution&);
 
 void print_job_stacks(const std::map<int, std::deque<int>>& job_stacks, std::ostream& log_stream);

@@ -52,27 +52,28 @@ void resolve_linprog(
 
 
         // First release the resources that are no longer used
-        log_stream << "Released workers:    ";
-        for (int m_idx : release_calendar_machines[time_pos]) {
-            available_machines.insert(m_idx);
-            log_stream << "M" << m_idx + 1 << " ";
-        }
-        for (int o_idx : release_calendar_operators[time_pos]) {
-            available_operators.insert(o_idx);
-            log_stream << "O" << o_idx + 1 << " ";
-        }
+        release_idle_resources(
+            time_pos,
+            available_machines,
+            available_operators,
+            release_calendar_machines[time_pos],
+            release_calendar_operators[time_pos]
+        );
+
+        // Display the released resources
+        log_stream << "Released resources:" << std::endl;
+        log_stream << "M";
+        print_set(release_calendar_machines[time_pos], 1, log_stream);
+        log_stream << std::endl << "O";
+        print_set(release_calendar_operators[time_pos], 1, log_stream);
         log_stream << std::endl;
 
         // Display the available resources
-        log_stream << "Available machines:  ";
-        for (int m_idx : available_machines) {
-            log_stream << "M" << m_idx + 1 << " ";
-        }
-        log_stream << std::endl;
-        log_stream << "Available operators: ";
-        for (int o_idx : available_operators) {
-            log_stream << "O" << o_idx + 1 << " ";
-        }
+        log_stream << "Available resources:" << std::endl;
+        log_stream << "M";
+        print_set(available_machines, 1, log_stream);
+        log_stream << std::endl << "O";
+        print_set(available_operators, 1, log_stream);
         log_stream << std::endl;
 
         // ====== Organize the tasks to be processed per order of priority ======

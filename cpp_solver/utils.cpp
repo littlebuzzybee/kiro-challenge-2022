@@ -255,6 +255,47 @@ void get_cumulative_remaining_time_per_job(
     }
 }
 
+
+void fill_job_stacks_and_compute_time(
+    Instance& inst,
+    std::map<int, std::deque<int>>& job_stacks,
+    std::vector<int>& total_time_per_job
+) {
+    for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
+
+        std::vector<int>& task_sequence = inst.jobs[j_idx].sequence;
+
+        job_stacks[j_idx] = std::deque<int>(task_sequence.begin(), task_sequence.end());
+        // Front of the deque has the lowest task indexes, i.e. the first to process in order
+
+        int total_processing_time = std::accumulate(
+            task_sequence.begin(),
+            task_sequence.end(),
+            0, // Initial value of the sum
+            [&inst](int total_sum, int t_idx) {
+                return total_sum + inst.tasks[t_idx].processing_time;
+            }
+        );
+
+        total_time_per_job[j_idx] = total_processing_time;
+    }
+}
+
+void release_idle_resources(
+    int time_pos,
+    std::set<int>& available_machines,
+    std::set<int>& available_operators,
+    const std::set<int>& machines_to_release,
+    const std::set<int>& operators_to_release
+) {
+    for (int m_idx : machines_to_release) {
+        available_machines.insert(m_idx);
+    }
+    for (int o_idx : operators_to_release) {
+        available_operators.insert(o_idx);
+    }
+}
+
 int compute_loss(const Instance& inst, const Solution& sol) {
     int loss = 0;
 
@@ -272,7 +313,7 @@ int compute_loss(const Instance& inst, const Solution& sol) {
 
 void print_job_stacks(const std::map<int, std::deque<int>>& job_stacks, std::ostream& log_stream) {
     // Print the job stacks
-    log_stream << "Job stacks current state:" << std::endl;
+    log_stream << std::endl << "Job stacks current state:" << std::endl;
     for (auto& [j_idx, task_stack] : job_stacks) {
         log_stream << "J" << j_idx + 1 << ": |";
         for (int t_idx : task_stack) {

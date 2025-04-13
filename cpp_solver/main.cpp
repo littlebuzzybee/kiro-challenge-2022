@@ -26,32 +26,37 @@
 
 
 int main(int argc, char* argv[]) {
-    std::string greetings = "================ Kiro 2022 Solver ================\n"
+    std::string greetings = 
+        "================ Kiro 2022 Solver ================\n"
         "       A solver for the Kiro 2022 problem\n"
         "      with several algorithms to choose from.\n"
         "==================================================";
     CLI::App app{ greetings };
 
 
-    std::filesystem::path instance_filename;
-    CLI::Option* ifo = app.add_option("-f,--file", instance_filename, "The JSON instance file to read from and solve");
+    std::filesystem::path input_filename;
+    CLI::Option* ifo = app.add_option("-f,--file", input_filename, "The JSON instance file to read from and solve");
     ifo->required();
     ifo->check(CLI::ExistingFile.description("File must exist").active(false).name("file"));
+    ifo->get_validator("file")->active();
+
+    std::string output_filename;
+    CLI::Option* ofo = app.add_option("-o,--output", output_filename, "The log file to write the solution to");
 
     bool write_problem_file{ false };
     app.add_flag("-w,--write_solution", write_problem_file, "Write problem solution to file");
 
-    double solver_time_limit;
+    double solver_time_limit { 10.0 };
     CLI::Option* stl = app.add_option("-t,--time_limit", solver_time_limit, "Time limit for each of Gurobi's steps in seconds");
-    stl->default_val(30.0);
+    stl->default_val(10.0);
     stl->check(CLI::Number.description("Time limit must be a number").active(false).name("type"));
     stl->check(CLI::PositiveNumber.description("Time limit must be positive").active(false).name("sign"));
     stl->get_validator("type")->active();
     stl->get_validator("sign")->active();
 
-    int lookahead_duration;
+    int lookahead_duration { 2 };
     CLI::Option* lad = app.add_option("-l,--lookahead", lookahead_duration, "Lookahead duration in seconds");
-    lad->default_val(5);
+    lad->default_val(2);
     lad->check(CLI::Number.description("Lookahead duration must be a number").active(false).name("type"));
     lad->check(CLI::PositiveNumber.description("Lookahead duration must be positive").active(false).name("sign"));
     lad->get_validator("type")->active();
@@ -60,9 +65,9 @@ int main(int argc, char* argv[]) {
     bool report_all_decisions = false;
     app.add_flag("-r,--report_all_decisions", report_all_decisions, "Report all decisions made by the solver");
 
-    int gurobi_max_threads;
+    int gurobi_max_threads { 4 };
     CLI::Option* gto = app.add_option("-g,--gurobi_threads", gurobi_max_threads, "Number of threads for Gurobi solver");
-    gto->default_val(3);
+    gto->default_val(4);
     gto->check(CLI::Number.description("Number of threads must be a number").active(false).name("type"));
     gto->check(CLI::PositiveNumber.description("Number of threads must be positive").active(false).name("sign"));
     gto->get_validator("type")->active();
@@ -105,34 +110,20 @@ int main(int argc, char* argv[]) {
 
 
 
-    std::ofstream log_solve("./log_solve.log");
-    // std::ofstream log_import("./log_import.log");
+    std::ofstream log_solve("./cpp_solve.log");
     std::ostream& log_inform = std::cout;
 
 
-    Instance inst = import_instance(instance_filename, log_solve);
+    Instance inst = import_instance(input_filename, log_solve);
 
     // Fill the jobs stacks with the tasks
     std::map<int, std::deque<int>> job_stacks;
     std::vector<int> total_time_per_job(inst.nb_jobs, 0);
-    for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
-
-        std::vector<int>& task_sequence = inst.jobs[j_idx].sequence;
-
-        job_stacks[j_idx] = std::deque<int>(task_sequence.begin(), task_sequence.end());
-        // Front of the deque has the lowest task indexes, i.e. the first to process in order
-
-        int total_processing_time = std::accumulate(
-            task_sequence.begin(),
-            task_sequence.end(),
-            0, // Initial value of the sum
-            [&inst](int total_sum, int t_idx) {
-                return total_sum + inst.tasks[t_idx].processing_time;
-            }
-        );
-
-        total_time_per_job[j_idx] = total_processing_time;
-    }
+    fill_job_stacks_and_compute_time(
+        inst,
+        job_stacks,
+        total_time_per_job
+    );
 
     log_inform << std::endl << "===== Instance Details: =====" << std::endl;
     log_inform << std::setw(5) << "J" << std::setw(8) << "W_J" << std::setw(8) << "\u03A3d_T" << std::setw(8) << "t_rel" << std::setw(8) << "t_due" << std::endl;
@@ -143,6 +134,8 @@ int main(int argc, char* argv[]) {
             << std::setw(8) << inst.jobs[j_idx].release_date
             << std::setw(8) << inst.jobs[j_idx].due_date << std::endl;
     }
+
+    print_job_stacks(job_stacks, log_inform);
 
 
     Solution sol;
@@ -222,12 +215,13 @@ int main(int argc, char* argv[]) {
 
     std::chrono::duration<double> duration;
     duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
+    log_inform << "Solution computed solution under ";
     if (duration.count() >= 5) {
-        log_inform << "Solution computed solution in " << duration.count() << " s." << std::endl;
+        log_inform << duration.count() << " s." << std::endl;
     }
     else {
         duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-        log_inform << "Solution computed solution in " << duration.count() << " \u33B2." << std::endl;
+        log_inform << duration.count() << " \u33B2." << std::endl;
     }
 
     // Check the validity of the solution
@@ -240,7 +234,7 @@ int main(int argc, char* argv[]) {
     }
 
     log_solve.close();
-    // log_import.close();
+
     return 0;
 }
 

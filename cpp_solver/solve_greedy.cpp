@@ -53,19 +53,33 @@ void resolve_greedy(
 
 
     while (!all_stacks_are_empty(job_stacks)) {
-        log_stream << std::endl << "*** Time " << time_pos << " ***" << std::endl;
+        log_stream << std::endl << "================== *** Time " << time_pos << " *** ==================" << std::endl;
 
 
         // First release the resources that are no longer used
-        log_stream << "  removed: ";
-        for (int m_idx : release_calendar_machines[time_pos]) {
-            available_machines.insert(m_idx);
-            log_stream << "M" << m_idx + 1 << " ";
-        }
-        for (int o_idx : release_calendar_operators[time_pos]) {
-            available_operators.insert(o_idx);
-            log_stream << "O" << o_idx + 1 << " ";
-        }
+        release_idle_resources(
+            time_pos,
+            available_machines,
+            available_operators,
+            release_calendar_machines[time_pos],
+            release_calendar_operators[time_pos]
+        );
+
+        // Display the released resources
+        log_stream << "Released resources:" << std::endl;
+        log_stream << "M";
+        print_set(release_calendar_machines[time_pos], 1, log_stream);
+        log_stream << std::endl << "O";
+        print_set(release_calendar_operators[time_pos], 1, log_stream);
+        log_stream << std::endl;
+
+        // Display the available resources
+        log_stream << "Available resources:" << std::endl;
+        log_stream << "M";
+        print_set(available_machines, 1, log_stream);
+        log_stream << std::endl << "O";
+        print_set(available_operators, 1, log_stream);
+        log_stream << std::endl;
 
 
         std::priority_queue<std::tuple<int, int>> task_queue{};
@@ -115,6 +129,7 @@ void resolve_greedy(
             }
 
             // Otherwise, we look for a qualified operator on one of the available machines for that task
+            // Analytics showed that tasks usually have far more overlapping common machines than operators, so we assign operators first in the hope that machines can click in easily thereafter
             int chosen_machine{ -1 };
             int chosen_operator{ -1 };
             std::vector<int> possible_operators;
