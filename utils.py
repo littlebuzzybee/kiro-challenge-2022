@@ -29,12 +29,13 @@ class Job:
 
 
 class Task:
-    def __init__(self, inst, tid, p, workers):
+    def __init__(self, inst, tid, p, workers, job):
         self.inst = inst   # instance
 
         self.id = tid          # Task id
         self.p = p             # processing time
         self.workers = workers # possible Workers for this Task (list)
+        self.j = job           # job this Task belongs to
 
         self.B = None         # beginning date
         self.C = None         # completion date
@@ -67,6 +68,7 @@ class Instance:
         self.tasks = {}
         self.machines = {}  # machines availabilities
         self.operators = {} # operators availabilities
+        self.task2job = {}  # task to job mapping
 
     def load(self, filename):
         with open(filename, 'rb') as f:
@@ -99,18 +101,21 @@ class Instance:
         rj  = job['release_date']
         dj  = job['due_date']
         wj  = job['weight']
+        for tid in Sj:
+            self.task2job[tid] = jid
         return Job(self, jid, Sj, rj, dj, wj)
 
     def parser_task(self, task):
         tid = task['task']
         p = task['processing_time']
+        j = self.task2job[tid]
         workers = []
         for machine in task['machines']:
             mid = machine['machine']
             for operator in machine['operators']:
                 oid = operator
                 workers.append(Worker(self, mid, oid))
-        return Task(self, tid, p, workers)
+        return Task(self, tid, p, workers, j)
     
     def greedy_solve(self):
         time = 0
