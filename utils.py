@@ -6,7 +6,7 @@ from pulp import *
 
 
 class Job:
-    def __init__(self, inst, jid, Sj, rj, dj, wj):
+    def __init__(self, inst, jid, Sj, rj, dj, wj, Tj):
         self.inst = inst  # instance
 
         self.id = jid  # job id
@@ -14,6 +14,7 @@ class Job:
         self.r = rj    # release date
         self.d = dj    # due date
         self.w = wj    # weight
+        self.T = Tj  # list of tasks for this job
 
     def B(self):
         return self.inst.tasks[self.S[0]].B  # beginning date
@@ -101,9 +102,11 @@ class Instance:
         rj  = job['release_date']
         dj  = job['due_date']
         wj  = job['weight']
+        tj = []
         for tid in Sj:
             self.task2job[tid] = jid
-        return Job(self, jid, Sj, rj, dj, wj)
+            tj.append(tid)
+        return Job(self, jid, Sj, rj, dj, wj, tj)
 
     def parser_task(self, task):
         tid = task['task']
