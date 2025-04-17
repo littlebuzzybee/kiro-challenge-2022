@@ -464,6 +464,11 @@ void node_analysis(const ExplorationNode& node, const Instance& inst, const Solu
     arma::fmat V;
 
     arma::svd(U, s, V, tasks_ma_laplacian);
+    // detect multiplicity of 0 as the number of zero eigenvalues
+    int multiplicity = 0;
+    for (int i = 0; i < s.n_elem; i++) {
+        if (s(i) < 1e-5) { multiplicity++; }
+    }
 
 
 

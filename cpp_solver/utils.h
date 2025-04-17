@@ -73,6 +73,7 @@ struct ExplorationNode {
     std::vector<int> assigned_tasks;
     std::vector<int> chosen_machines; // task index -> machine index
     std::vector<int> chosen_operators; // task index -> operator index
+    arma::Col<float> workers; // workers assigned
 };
 
 nlohmann::json read_json_file(std::string);
