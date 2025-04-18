@@ -134,6 +134,7 @@ Instance import_instance(std::filesystem::path filename, std::ostream& out_strea
                 int operator_idx = static_cast<int>(operator_id) - 1; // ids are offset by 1 in the JSON file
                 partial_ops.emplace(operator_idx);    // add the operator to the set of possible operators for that task
                 task_object.operators.emplace(operator_idx); // add the operator to the set of all possible operators for the task
+                task_object.compatible_workers.emplace(std::make_tuple(machine_idx, operator_idx)); // add the machine/operator pair to the set of compatible workers
             }
             task_object.compatibility.emplace(machine_idx, partial_ops);
             task_object.machines.emplace(machine_idx); // add the machine to the set of possible machines

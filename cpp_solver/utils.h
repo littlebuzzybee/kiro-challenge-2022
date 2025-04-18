@@ -34,6 +34,7 @@ struct Task {
     std::set<int> machines; // possible machine indexes
     std::map<int, std::set<int>> compatibility; // machine -> operators
     std::set<int> operators; // possible operator indexes
+    std::set<std::tuple<int, int>> compatible_workers; // machine, operator pairs
 };
 
 struct Instance {

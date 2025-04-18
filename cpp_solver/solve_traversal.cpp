@@ -101,11 +101,11 @@ void resolve_traversal(
         std::sort(candidate_tasks.begin(), candidate_tasks.end(), std::greater<std::tuple<int, int>>());
 
         // Display the candidate tasks
-        log_stream << "Candidate tasks for processing (priority score): { ";
+         log_stream << "There are " << candidate_tasks.size() << " candidate tasks for processing (priority score):" << std::endl << " { ";
         for (auto& [score, t_idx] : candidate_tasks) {
             log_stream << "T" << t_idx + 1 << "(" << score << ") ";
         }
-        log_stream << " }" << std::endl;
+        log_stream << "}" << std::endl;
 
         // Compute the characteristics of the available workers pool this round
         int nb_candidate_tasks = static_cast<int>(candidate_tasks.size());
@@ -193,7 +193,7 @@ void resolve_traversal(
 
 
         arma::Col<float> active_workers = arma::Col<float>(nb_workers, arma::fill::ones); // all workers are in use by default until conflicts are resolved
-        log_stream << "There are " << nb_workers << " workers available." << std::endl;
+        log_stream << "There are " << nb_workers << " workers available with given resources." << std::endl;
 
         // Computing the number or conflicts
         int nb_conflicts = static_cast<int>((double).5 * arma::dot(active_workers, W_conflicts * active_workers));
@@ -204,7 +204,7 @@ void resolve_traversal(
         arma::Col<float> W_compound_scores; // Compound scores of the workers
         arma::Col<arma::uword> W_compound_scores_indexes; // Sorted indexes of the compound scores
 
-        log_stream << "There are " << nb_conflicts << " conflicts to resolve among them." << std::endl;
+        log_stream << "Resolving " << nb_conflicts << " conflicts among them...";
         while (nb_conflicts > 0) {
             T_mult = T_W_compat * active_workers;
 
@@ -246,7 +246,7 @@ void resolve_traversal(
             // We adopt a logarithmic approach to the number of conflicts to be eliminated:
             // If there are more than 10, we will delete half of them before updating the gradients,
             // otherwise we will delete one worker at a time and update the rankings every time
-            float planned_deletions = nb_conflicts > 1000 ? 100.0f : (nb_conflicts > 100 ? 10.0f : 1.0f);
+            int planned_deletions = nb_conflicts > 1000 ? 50 : (nb_conflicts > 100 ? 5 : 1);
             int nb_eliminated = 0;
 
             while (nb_eliminated < planned_deletions && w_it != W_compound_scores_indexes.end()) {
@@ -264,12 +264,13 @@ void resolve_traversal(
             // Updating the number or conflicts
             nb_conflicts = static_cast<int>(.5f * arma::dot(active_workers, W_conflicts * active_workers));
         }
+        log_stream << " Done." << std::endl;
 
         // We have now eliminated all conflicts, all remaining workers are compatible
         // We can now assign them to tasks
 
-        log_stream << "Presolve has eliminated " << nb_workers - static_cast<int>(arma::sum(active_workers)) << " workers." << std::endl;
-        log_stream << "There are " << arma::sum(active_workers) << " selected potential workers remaining: { ";
+        log_stream << "Pruning has eliminated " << nb_workers - static_cast<int>(arma::sum(active_workers)) << " workers." << std::endl;
+        log_stream << "There are " << arma::sum(active_workers) << " selected compatible workers remaining:" << std::endl << " { ";
         for (int i = 0; i < nb_workers; i++) {
             if (active_workers(i) > 0.5f) {
                 int w_m_idx = std::get<0>(workers_pool[i]);
@@ -277,19 +278,35 @@ void resolve_traversal(
                 log_stream << "M" << w_m_idx + 1 << "_O" << w_o_idx + 1 << " ";
             }
         }
-        log_stream << " }" << std::endl;
-        log_stream << "There are " << static_cast<int>(arma::sum(active_workers)) << " workers and " << candidate_tasks.size() << " candidate tasks remaning." << std::endl;
+        log_stream << "}" << std::endl;
 
 
-        // Recompute the task multiplicities
+        // Update the compatibility matrix with the remaining active workers
+        T_W_compat.each_row() % active_workers.t();
+
+        // Update the task multiplicities
         T_mult = T_W_compat * active_workers;
 
+/*         for (int i = 0; i < nb_workers; i++) {
+            int w_m_idx = std::get<0>(workers_pool[i]);
+            int w_o_idx = std::get<1>(workers_pool[i]);
+            log_stream << "M" << w_m_idx + 1 << "_O" << w_o_idx + 1 << "    ";
+        }
+        log_stream << std::endl << active_workers.t() << std::endl; */
+
+
         // Compute the remaing active workers' versatilities: counting the number of tasks each one of them can address
-        arma::Col<float> W_versatility = arma::sum(T_W_compat.each_row() % active_workers.t(), 0).t();
-        
+        arma::Row<float> W_versatility = arma::sum(T_W_compat.each_row() % active_workers.t(), 0);
+        assert(W_versatility.size() == nb_workers);
+
         // Sort the workers by their versatility and get the ones having the least versatility
+        // We choose the least versatile workers first because we will address the tasks by order of ascending scores
+        // Therefore, it is better to give the "most important" tasks the first compatible, least versatile worker first so that some
+        // other workers can be freed up for the less important tasks and maximize the number of addressed tasks overall
         arma::Col<arma::uword> W_versatility_indexes = arma::sort_index(W_versatility, "ascend");
-        std::vector<float> W_versatility_indexes_ = arma::conv_to<std::vector<float>>::from(W_versatility_indexes);
+
+        std::vector<int> W_versatility_indexes_ = arma::conv_to<std::vector<int>>::from(W_versatility_indexes);
+
 
 
 
@@ -298,20 +315,27 @@ void resolve_traversal(
         for (auto& [_, t_idx] : candidate_tasks) {
             // they are already ordered so the greatest score is first
             int t_rank = task2poolindex_map[t_idx]; // index of the task in the candidate tasks vector
-            
+
             // Get the first worker that has the least versatility and that is active and compatible for this task
             int w_idx_ptr = 0;
-            while (w_idx_ptr < nb_workers && T_W_compat(t_rank, W_versatility_indexes(w_idx_ptr)) < 0.5f) {
+            while (
+                w_idx_ptr < nb_workers
+                && (T_W_compat(t_rank, W_versatility_indexes_[w_idx_ptr]) < 0.5f
+                    || active_workers(W_versatility_indexes_[w_idx_ptr]) < 0.5f)
+                ) {
                 w_idx_ptr++;
             }
+
+
             // If we have no more workers available, we stop
             if (w_idx_ptr >= nb_workers) {
                 continue;
             }
             // Get the worker's index
-            int w_idx = W_versatility_indexes(w_idx_ptr);
+            int w_idx = W_versatility_indexes_[w_idx_ptr];
             // Choose that worker for task t_idx and reset the compatibility column of that worker since it is not available anymore
             T_W_compat.col(w_idx).zeros();
+            active_workers(w_idx) = 0.0f; // Deactivate the worker
 
             // Now officially address the task
             int chosen_machine = std::get<0>(workers_pool[w_idx]);
@@ -338,7 +362,7 @@ void resolve_traversal(
             // Remove the task from the stack
             job_stacks[j_idx].pop_front();
             log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << std::endl;
-            
+
         }
         time_pos++;
     }
