@@ -227,7 +227,7 @@ void get_sort_tasks_and_scores(
         int t_idx = task_stack.front();
         int overhead = time_pos + cumulative_remaining_time_per_job[j_idx] - inst.jobs[j_idx].due_date;
         int tardiness = std::max(0, overhead);
-        float score = std::sqrt(inst.jobs[j_idx].weight * tardiness + 1.0); // Add 1 to avoid zero scores for linear programming; square root tends to even relative score discrepancies slightly
+        float score = inst.jobs[j_idx].weight * tardiness + 1.0; // Add 1 to avoid zero scores for linear programming; square root tends to even relative score discrepancies slightly
         // the higher the score, the higher the priority to avoid accumulation of tardiness
         candidate_tasks.emplace_back(std::make_tuple(score, t_idx));
     }

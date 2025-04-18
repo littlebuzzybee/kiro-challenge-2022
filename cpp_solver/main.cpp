@@ -214,14 +214,14 @@ int main(int argc, char* argv[]) {
     log_inform << "Total loss: " << total_loss << std::endl;
 
     std::chrono::duration<double> duration;
-    duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     log_inform << "Solution computed solution under ";
-    if (duration.count() >= 5) {
-        log_inform << duration.count() << " s." << std::endl;
+    if (duration.count() < 1000) {
+        log_inform << duration.count() << "\u33B2." << std::endl;
     }
     else {
-        duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-        log_inform << duration.count() << " \u33B2." << std::endl;
+        duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
+        log_inform << duration.count() + 1 << "s." << std::endl;
     }
 
     // Check the validity of the solution

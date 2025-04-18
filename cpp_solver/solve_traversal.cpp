@@ -234,10 +234,10 @@ void resolve_traversal(
 
 
             // Compute the compound score
-            W_compound_scores = W_deletion_impact_scores / (W_conflict_scores + .1f);
+            W_compound_scores = W_conflict_scores / (W_deletion_impact_scores + .1f);
 
-            // Sort workers by their compound score and get the ones having the least deletion impact / conflicting tendency score
-            W_compound_scores_indexes = arma::sort_index(W_compound_scores, "ascend");
+            // Sort workers by their compound score and get the ones having the most [conflicting tendency / deletion impact] score
+            W_compound_scores_indexes = arma::sort_index(W_compound_scores, "descend");
 
             // Get the iterator to the worker index that has the highest compound score
             arma::uword* w_it = W_compound_scores_indexes.begin();
@@ -326,9 +326,11 @@ void resolve_traversal(
                 w_idx_ptr++;
             }
 
+            int j_idx = inst.tasks[t_idx].job_parent;
 
             // If we have no more workers available, we stop
             if (w_idx_ptr >= nb_workers) {
+                log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") postponed." << std::endl;
                 continue;
             }
             // Get the worker's index
@@ -351,7 +353,6 @@ void resolve_traversal(
             sol.begin_time_tasks[t_idx] = time_pos;
 
             // Prevent the subsequent assignment of any other task of the same job before the end of the current task
-            int j_idx = inst.tasks[t_idx].job_parent;
             next_time_persue_job[j_idx] = time_pos + inst.tasks[t_idx].processing_time;
 
             // Update the release calendar for the chosen machine and operator
