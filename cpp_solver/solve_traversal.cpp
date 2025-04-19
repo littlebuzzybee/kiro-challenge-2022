@@ -9,6 +9,7 @@ void resolve_traversal(
 ) {
     log_stream << "Beginning solving procedure with a tree traversal search heuristic..." << std::endl;
 
+
     // Display the job_stacks
     print_job_stacks(job_stacks, log_stream);
 
@@ -49,6 +50,7 @@ void resolve_traversal(
     while (!all_stacks_are_empty(job_stacks) && fail_safe < 100) {
         fail_safe++;
         log_stream << std::endl << "================== *** Time " << time_pos << " *** ==================" << std::endl;
+        std::cout << "Beginning solving procedure at time " << time_pos << std::endl;
 
         // First release the resources that are no longer used
         release_idle_resources(
@@ -101,7 +103,7 @@ void resolve_traversal(
         std::sort(candidate_tasks.begin(), candidate_tasks.end(), std::greater<std::tuple<int, int>>());
 
         // Display the candidate tasks
-         log_stream << "There are " << candidate_tasks.size() << " candidate tasks for processing (priority score):" << std::endl << " { ";
+        log_stream << std::endl << "There are " << candidate_tasks.size() << " candidate tasks for processing (priority score):" << std::endl << " { ";
         for (auto& [score, t_idx] : candidate_tasks) {
             log_stream << "T" << t_idx + 1 << "(" << score << ") ";
         }
@@ -191,27 +193,55 @@ void resolve_traversal(
         // TODO : Change the (task_idx, task_score) representation to use the armadillo's constructors from vectors directly
 
 
-
+        // Define the indicator vector of active workers
         arma::Col<float> active_workers = arma::Col<float>(nb_workers, arma::fill::ones); // all workers are in use by default until conflicts are resolved
-        log_stream << "There are " << nb_workers << " workers available with given resources." << std::endl;
+
 
         // Computing the number or conflicts
-        int nb_conflicts = static_cast<int>((double).5 * arma::dot(active_workers, W_conflicts * active_workers));
+        int nb_conflicts = static_cast<int>(.5f * arma::dot(active_workers, W_conflicts * active_workers));
 
+        // Compute the laplacian of the conflict matrix
+        arma::SpMat<double> W_conflicts_laplacian = -1.0 * arma::conv_to<arma::SpMat<double>>::from(W_conflicts);
+        W_conflicts_laplacian.diag() = -1.0 * arma::sum(W_conflicts_laplacian, 1);
+
+        arma::vec eigval;
+        arma::mat eigvec;
+        arma::eigs_opts opts;
+        opts.maxiter = 1000;
+        opts.tol = 1e-5;
+        int nb_eigenvalues = W_conflicts_laplacian.n_rows > 5 ? 5 : W_conflicts_laplacian.n_rows - 1;
+        log_stream << "Computing " << nb_eigenvalues << " eigenvalues of the laplacian matrix...";
+        arma::eigs_sym(eigval, eigvec, W_conflicts_laplacian, nb_eigenvalues, "sa");
+
+        int multiplicity = 0;
+        for (int i = 0; i < eigval.n_elem; i++) {
+            if (eigval(i) < 1e-5) { multiplicity++; }
+        }
+
+
+        log_stream << " Done." << std::endl;
+        log_stream << "There are " << nb_workers << " workers available with given resources in >= " << multiplicity << " connected components." << std::endl;
+
+        // Defining some variables to store for the elimination heuristics loop
         arma::Col<float> T_mult; // Assignment multiplicity of the tasks
         arma::Col<float> W_conflict_scores; // Conflict scores of the workers
         arma::Col<float> W_deletion_impact_scores; // Deletion impact scores of the workers
         arma::Col<float> W_compound_scores; // Compound scores of the workers
         arma::Col<arma::uword> W_compound_scores_indexes; // Sorted indexes of the compound scores
 
-        log_stream << "Resolving " << nb_conflicts << " conflicts among them...";
+        log_stream << "Resolving " << nb_conflicts << " conflicts among them..." << std::endl << "Conflicts remaining: ";
+        int nb_elim_rounds = 0;
         while (nb_conflicts > 0) {
+            // Compute the multiplicity of the tasks: i.e. the number of workers capable of addressing them
             T_mult = T_W_compat * active_workers;
 
+            log_stream << nb_conflicts << ".. " << std::flush;
 
             // Compute the conflict score of each worker as a gradient of the conflict function 1/2 x.T G x
             // Each entry of that gradient approximates a 'contribution' value of the corresponding worker activation to the overall number of conflicts
-            W_conflict_scores = W_conflicts * active_workers;
+            W_conflict_scores = (W_conflicts * active_workers) % active_workers; // Project the gradient onto the vector
+
+
 
             /*
             arma::Col<float> T_multipliers = T_scores / (T_mult + .1f);
@@ -238,39 +268,38 @@ void resolve_traversal(
 
             // Sort workers by their compound score and get the ones having the most [conflicting tendency / deletion impact] score
             W_compound_scores_indexes = arma::sort_index(W_compound_scores, "descend");
+            // std::cout << arma::sort(W_compound_scores, "descend") << std::endl;
 
-            // Get the iterator to the worker index that has the highest compound score
-            arma::uword* w_it = W_compound_scores_indexes.begin();
+
 
             // Begin eliminating problematic workers until we have removed enough of them
             // We adopt a logarithmic approach to the number of conflicts to be eliminated:
             // If there are more than 10, we will delete half of them before updating the gradients,
             // otherwise we will delete one worker at a time and update the rankings every time
-            int planned_deletions = nb_conflicts > 1000 ? 50 : (nb_conflicts > 100 ? 5 : 1);
-            int nb_eliminated = 0;
+            int planned_deletions = nb_conflicts > 10000 ? 1000 : (nb_conflicts > 1000 ? 100 : (nb_conflicts > 100 ? 10 : 1));
+            float nb_eliminated = 0.0f;
 
-            while (nb_eliminated < planned_deletions && w_it != W_compound_scores_indexes.end()) {
-                // elimite half of the currently ordered conflicts before updating the actual number of conflicts
-                int w_idx = W_compound_scores_indexes(*w_it);
+            // Get the iterator to the worker index that has the highest compound score
+            for (auto w_r : W_compound_scores_indexes) {
                 // Deactivate the worker
-                if (active_workers(w_idx) < 0.5f) {
-                    w_it++;
-                    continue;
+                if (nb_eliminated >= planned_deletions || nb_eliminated >= nb_conflicts || W_compound_scores(w_r) == .0f) {
+                    break;
                 }
-                active_workers(w_idx) = 0.0f; // Deactivate the worker
-                nb_eliminated++;
-                w_it++;
+                // Compute the number of conflicts eliminated as the dot product of the row of the conflict matrix and the active workers
+                nb_eliminated += arma::dot(W_conflicts.row(w_r).t(), active_workers);
+                active_workers(w_r) = 0.0f; // Deactivate the worker
             }
             // Updating the number or conflicts
             nb_conflicts = static_cast<int>(.5f * arma::dot(active_workers, W_conflicts * active_workers));
+            nb_elim_rounds++;
         }
-        log_stream << " Done." << std::endl;
+        log_stream << " Done. (" << nb_elim_rounds << " rounds)" << std::endl;
 
         // We have now eliminated all conflicts, all remaining workers are compatible
         // We can now assign them to tasks
 
         log_stream << "Pruning has eliminated " << nb_workers - static_cast<int>(arma::sum(active_workers)) << " workers." << std::endl;
-        log_stream << "There are " << arma::sum(active_workers) << " selected compatible workers remaining:" << std::endl << " { ";
+        log_stream << std::endl << "There are " << arma::sum(active_workers) << " selected compatible workers remaining:" << std::endl << " { ";
         for (int i = 0; i < nb_workers; i++) {
             if (active_workers(i) > 0.5f) {
                 int w_m_idx = std::get<0>(workers_pool[i]);
@@ -287,15 +316,15 @@ void resolve_traversal(
         // Update the task multiplicities
         T_mult = T_W_compat * active_workers;
 
-/*         for (int i = 0; i < nb_workers; i++) {
-            int w_m_idx = std::get<0>(workers_pool[i]);
-            int w_o_idx = std::get<1>(workers_pool[i]);
-            log_stream << "M" << w_m_idx + 1 << "_O" << w_o_idx + 1 << "    ";
-        }
-        log_stream << std::endl << active_workers.t() << std::endl; */
+        /*         for (int i = 0; i < nb_workers; i++) {
+                    int w_m_idx = std::get<0>(workers_pool[i]);
+                    int w_o_idx = std::get<1>(workers_pool[i]);
+                    log_stream << "M" << w_m_idx + 1 << "_O" << w_o_idx + 1 << "    ";
+                }
+                log_stream << std::endl << active_workers.t() << std::endl; */
 
 
-        // Compute the remaing active workers' versatilities: counting the number of tasks each one of them can address
+                // Compute the remaing active workers' versatilities: counting the number of tasks each one of them can address
         arma::Row<float> W_versatility = arma::sum(T_W_compat.each_row() % active_workers.t(), 0);
         assert(W_versatility.size() == nb_workers);
 
@@ -309,8 +338,8 @@ void resolve_traversal(
 
 
 
-
-        log_stream << "Assigned tasks are:" << std::endl;
+        int nb_assigned_tasks = 0;
+        log_stream << std::endl << "Assigned tasks are:" << std::endl;
         // Now we assign the tasks to the workers
         for (auto& [_, t_idx] : candidate_tasks) {
             // they are already ordered so the greatest score is first
@@ -333,6 +362,7 @@ void resolve_traversal(
                 log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") postponed." << std::endl;
                 continue;
             }
+            nb_assigned_tasks++;
             // Get the worker's index
             int w_idx = W_versatility_indexes_[w_idx_ptr];
             // Choose that worker for task t_idx and reset the compatibility column of that worker since it is not available anymore
@@ -365,7 +395,8 @@ void resolve_traversal(
             log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << std::endl;
 
         }
+        log_stream << "Assigned " << nb_assigned_tasks << " tasks of " << nb_candidate_tasks << " this round (" << static_cast<float>(nb_assigned_tasks) / static_cast<float>(nb_candidate_tasks) * 100.0f << "%)." << std::endl;
         time_pos++;
     }
-    log_stream << std::endl << "End of solving procedure." << std::endl << std::endl;
+    log_stream << "================== *** End of procedure *** ==================" << std::endl;
 }

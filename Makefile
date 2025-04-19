@@ -10,19 +10,20 @@ GUROBI_LIB = /opt/gurobi1200/linux64/lib
 ORTOOLS_INCLUDE = /opt/or-tools_v9.11.4210/include
 ORTOOLS_LIB = /opt/or-tools_v9.11.4210/lib
 
+HIGHS_INCLUDE = /opt/highs-1.10.0/include/highs
+HIGHS_LIB = /opt/highs-1.10.0/lib
+
 # KALIS_INCLUDE
 # KALIS_LIB
 
-# ARMADILLO_LIB = 
-
 JSON_INCLUDE = ./nlohmann
 
-INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE) -I$(ORTOOLS_INCLUDE)
-LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE) -L$(ORTOOLS_LIB)
+INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE) -I$(ORTOOLS_INCLUDE) -I$(HIGHS_INCLUDE)
+LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE) -L$(ORTOOLS_LIB) -L$(HIGHS_LIB)
 
 
 # Library linking
-LDLIBS = -lgurobi_c++ -lgurobi120 -ltbb -lpthread -lstdc++fs -lortools -llapack -lblas -larmadillo
+LDLIBS = -lgurobi_c++ -lgurobi120 -ltbb -lpthread -lstdc++fs -lortools -llapack -lblas -larmadillo -lhighs
 
 
 
@@ -32,7 +33,7 @@ debug: CXXFLAGS += -g3 -O0 #  -g0..3 (g default), pg is for gprof
 debug: scheduler
 
 # a rule for building the program fully optimized and release it
-build: CXXFLAGS += -O3 -DNDEBUG -fopt-info-vec -mavx -mavx2 -msse -msse3 -msse4.1 -mssse3 -msse2 # -fopenmp
+build: CXXFLAGS += -O3 -Os -DNDEBUG -fopt-info-vec -mavx -mavx2 -msse -msse3 -msse4.1 -mssse3 -msse2 -fopenmp
 build: scheduler
 
 # a rule for profiling the program

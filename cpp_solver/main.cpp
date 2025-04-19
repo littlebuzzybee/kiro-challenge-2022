@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
     stl->get_validator("sign")->active();
 
     int lookahead_duration { 2 };
-    CLI::Option* lad = app.add_option("-l,--lookahead", lookahead_duration, "Lookahead duration in seconds");
+    CLI::Option* lad = app.add_option("-k,--lookahead", lookahead_duration, "Lookahead duration in seconds");
     lad->default_val(2);
     lad->check(CLI::Number.description("Lookahead duration must be a number").active(false).name("type"));
     lad->check(CLI::PositiveNumber.description("Lookahead duration must be positive").active(false).name("sign"));
@@ -79,6 +79,13 @@ int main(int argc, char* argv[]) {
     mth->required();
     mth->check(CLI::IsMember({ "solver", "greedy", "linprog", "traversal" }, CLI::ignore_case).description("Method must be one of: solver, greedy, linprog, traversal").active(false).name("method"));
     mth->get_validator("method")->active();
+
+
+    std::string logging;
+    CLI::Option* log = app.add_option("-l,--logging", logging, "Log stream channeling");
+    log->check(CLI::IsMember({ "console", "file"}, CLI::ignore_case).description("Logging stream must be one of: console, file").active(false).name("type"));
+    log->get_validator("type")->active();
+    log->default_val("console");
 
 
 
@@ -109,8 +116,20 @@ int main(int argc, char* argv[]) {
 
 
 
-
-    std::ofstream log_solve("./cpp_solve.log");
+    // Set up the logging streams
+    std::ostream* log_ptr = nullptr;
+    std::ofstream file_stream;
+    if (logging == "console") {
+        log_ptr = &std::cout;
+    } else if (logging == "file") {
+        file_stream.open("./cpp_solver.log");
+        log_ptr = &file_stream;
+    } else {
+        std::cerr << "Invalid logging option provided." << std::endl;
+        exit(1);
+    }
+    std::ostream& log_solve = *log_ptr;
+    // std::ofstream log_solve("./cpp_solve.log");
     std::ostream& log_inform = std::cout;
 
 
@@ -125,7 +144,7 @@ int main(int argc, char* argv[]) {
         total_time_per_job
     );
 
-    log_inform << std::endl << "===== Instance Details: =====" << std::endl;
+    log_inform << std::endl << "======== Instance Details: ========" << std::endl;
     log_inform << std::setw(5) << "J" << std::setw(8) << "W_J" << std::setw(8) << "\u03A3d_T" << std::setw(8) << "t_rel" << std::setw(8) << "t_due" << std::endl;
     for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
         log_inform << std::setw(5) << j_idx + 1
@@ -200,7 +219,7 @@ int main(int argc, char* argv[]) {
 
 
     // Now display all decisions in the solution
-    log_inform << std::endl << "===== Solution Details: =====" << std::endl;
+    log_inform << std::endl << "======== Solution Details: ========" << std::endl;
     log_inform << std::setw(5) << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << std::endl;
     for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
         log_inform << std::setw(5) << "T" << t_idx + 1
@@ -233,7 +252,9 @@ int main(int argc, char* argv[]) {
         log_inform << "The solution is invalid." << std::endl;
     }
 
-    log_solve.close();
+    if (file_stream.is_open()) {
+        file_stream.close();
+    }
 
     return 0;
 }
