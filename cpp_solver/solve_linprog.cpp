@@ -9,9 +9,6 @@ void resolve_linprog(
 ) {
     log_stream << "Beginning solving procedure with a local LP timestep search heuristic..." << std::endl;
 
-    // Display the job_stacks
-    print_job_stacks(job_stacks, log_stream);
-
 
     std::set<int> available_machines{};
     std::set<int> available_operators{};
@@ -192,7 +189,6 @@ void resolve_linprog(
         }
 
         log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations" << std::endl;
-        log_stream << "Objective value = " << objective->Value() << std::endl;
 
 
         std::map <int, std::tuple<int, int>> tasks_chosen_resources{};
@@ -205,12 +201,9 @@ void resolve_linprog(
             }
         }
 
-
-        log_stream << "Best solution assigns " << tasks_chosen_resources.size() << " task(s): { ";
-        for (auto & [t_idx, resources] : tasks_chosen_resources) {
-            log_stream << "T" << t_idx + 1 << " ";
-        }
-        log_stream << "} with registered overhead tardiness score " << objective->Value() << std::endl;
+        
+        log_stream << "Overhead tardiness score: " << objective->Value() << std::endl;
+        log_stream << std::endl << "Assigned tasks are:" << std::endl;
 
 
         for (auto & [t_idx, resources] : tasks_chosen_resources) {
@@ -241,8 +234,8 @@ void resolve_linprog(
             job_stacks[j_idx].pop_front();
             log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << std::endl;
         }
-        // FORMER CODE GOES HERE
+        log_stream << std::endl << "Assigned " << tasks_chosen_resources.size() << " tasks of " << candidate_tasks.size() << " this round (" << static_cast<float>(tasks_chosen_resources.size()) / static_cast<float>(candidate_tasks.size()) * 100.0f << "%)." << std::endl;
         time_pos++;
     }
-    log_stream << std::endl << "End of solving procedure." << std::endl << std::endl;
+    log_stream << std::endl << "================== *** End of procedure *** ==================" << std::endl;
 }

@@ -225,9 +225,11 @@ void get_sort_tasks_and_scores(
             continue;
         }
         int t_idx = task_stack.front();
-        int overhead = time_pos + cumulative_remaining_time_per_job[j_idx] - inst.jobs[j_idx].due_date;
-        int tardiness = std::max(0, overhead);
-        float score = inst.jobs[j_idx].weight * tardiness + 1.0; // Add 1 to avoid zero scores for linear programming; square root tends to even relative score discrepancies slightly
+        int proj_completion = time_pos + cumulative_remaining_time_per_job[j_idx];
+        int proj_overhead = proj_completion - inst.jobs[j_idx].due_date;
+        int proj_tardiness = std::max(0, proj_overhead);
+        int proj_penalty = proj_tardiness > 0 ? 1 : 0;
+        float score = std::sqrt(inst.jobs[j_idx].weight * (proj_completion + inst.tardiness * proj_tardiness + inst.unit_penalty * proj_penalty) + .1f);
         // the higher the score, the higher the priority to avoid accumulation of tardiness
         candidate_tasks.emplace_back(std::make_tuple(score, t_idx));
     }
@@ -302,12 +304,12 @@ int compute_loss(const Instance& inst, const Solution& sol) {
 
     for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
         int last_task = inst.jobs[j_idx].sequence.back();
-        int wj = inst.jobs[j_idx].weight;
-        int Cj = sol.begin_time_tasks[last_task] + inst.tasks[last_task].processing_time;
-        int dj = inst.jobs[j_idx].due_date;
-        int Tj = std::max(Cj - dj, 0);
-        int Uj = Tj > 0 ? 1 : 0;
-        loss += wj * (Cj + inst.tardiness * Tj + inst.unit_penalty * Uj);
+        int wj = inst.jobs[j_idx].weight; // job weight
+        int Cj = sol.begin_time_tasks[last_task] + inst.tasks[last_task].processing_time; // completion date of the last task
+        int dj = inst.jobs[j_idx].due_date; // due date of the job
+        int Tj = std::max(Cj - dj, 0); // tardiness of the job
+        int Uj = Tj > 0 ? 1 : 0; // unit penalty of the job
+        loss += wj * (Cj + inst.tardiness * Tj + inst.unit_penalty * Uj); // total loss of the job
     }
     return loss;
 }
@@ -369,11 +371,11 @@ bool check_validity(const Instance& inst, const Solution& sol) {
 
 
                 if (busy_machines.contains(m_idx)) {
-                    std::cout << "M" << m_idx + 1 << " is busy at time " << t << " from T" << task_of_machine[m_idx] + 1 << " but T" << t_idx + 1 << " uses it again." << std::endl;
+                    std::cout << "M" << m_idx + 1 << " is busy at time " << t << " from T" << task_of_machine[m_idx] + 1 << " but T" << t_idx + 1 << " uses it too." << std::endl;
                     return false;
                 }
                 if (busy_operators.contains(o_idx)) {
-                    std::cout << "O" << o_idx + 1 << " is busy at time " << t << " from T" << task_of_operator[o_idx] + 1 << " but T" << t_idx + 1 << " uses it again." << std::endl;
+                    std::cout << "O" << o_idx + 1 << " is busy at time " << t << " from T" << task_of_operator[o_idx] + 1 << " but T" << t_idx + 1 << " uses it too." << std::endl;
                     return false;
                 }
 

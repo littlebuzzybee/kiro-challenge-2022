@@ -10,10 +10,6 @@ void resolve_traversal(
     log_stream << "Beginning solving procedure with a tree traversal search heuristic..." << std::endl;
 
 
-    // Display the job_stacks
-    print_job_stacks(job_stacks, log_stream);
-
-
     std::set<int> available_machines{};
     std::set<int> available_operators{};
 
@@ -189,10 +185,6 @@ void resolve_traversal(
             T_scores(i) = std::get<0>(candidate_tasks[i]);
         }
 
-        // TODO : add a vector of workers in a Task's representation to change the nested for loops every time
-        // TODO : Change the (task_idx, task_score) representation to use the armadillo's constructors from vectors directly
-
-
         // Define the indicator vector of active workers
         arma::Col<float> active_workers = arma::Col<float>(nb_workers, arma::fill::ones); // all workers are in use by default until conflicts are resolved
 
@@ -229,13 +221,13 @@ void resolve_traversal(
         arma::Col<float> W_compound_scores; // Compound scores of the workers
         arma::Col<arma::uword> W_compound_scores_indexes; // Sorted indexes of the compound scores
 
-        log_stream << "Resolving " << nb_conflicts << " conflicts among them..." << std::endl << "Conflicts remaining: ";
+        log_stream << "Resolving " << nb_conflicts << " conflicts among them..." << std::endl;
         int nb_elim_rounds = 0;
         while (nb_conflicts > 0) {
             // Compute the multiplicity of the tasks: i.e. the number of workers capable of addressing them
             T_mult = T_W_compat * active_workers;
 
-            log_stream << nb_conflicts << ".. " << std::flush;
+            log_stream << "\rConflicts remaining: " << nb_conflicts << ".. " << std::flush;
 
             // Compute the conflict score of each worker as a gradient of the conflict function 1/2 x.T G x
             // Each entry of that gradient approximates a 'contribution' value of the corresponding worker activation to the overall number of conflicts
@@ -276,7 +268,7 @@ void resolve_traversal(
             // We adopt a logarithmic approach to the number of conflicts to be eliminated:
             // If there are more than 10, we will delete half of them before updating the gradients,
             // otherwise we will delete one worker at a time and update the rankings every time
-            int planned_deletions = nb_conflicts > 10000 ? 1000 : (nb_conflicts > 1000 ? 100 : (nb_conflicts > 100 ? 10 : 1));
+            int planned_deletions = nb_conflicts > 100000 ? 10000 : (nb_conflicts > 10000 ? 5000 : (nb_conflicts > 1000 ? 100 : (nb_conflicts > 100 ? 10 : 1)));
             float nb_eliminated = 0.0f;
 
             // Get the iterator to the worker index that has the highest compound score
@@ -395,8 +387,8 @@ void resolve_traversal(
             log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << std::endl;
 
         }
-        log_stream << "Assigned " << nb_assigned_tasks << " tasks of " << nb_candidate_tasks << " this round (" << static_cast<float>(nb_assigned_tasks) / static_cast<float>(nb_candidate_tasks) * 100.0f << "%)." << std::endl;
+        log_stream << std::endl << "Assigned " << nb_assigned_tasks << " tasks of " << nb_candidate_tasks << " this round (" << static_cast<float>(nb_assigned_tasks) / static_cast<float>(nb_candidate_tasks) * 100.0f << "%)." << std::endl;
         time_pos++;
     }
-    log_stream << "================== *** End of procedure *** ==================" << std::endl;
+    log_stream << std::endl << "================== *** End of procedure *** ==================" << std::endl;
 }
