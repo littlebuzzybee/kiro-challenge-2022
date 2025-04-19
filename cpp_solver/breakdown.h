@@ -98,8 +98,7 @@ void set_workers_time_exclusion_constraints(
     std::map<int, std::map<int, GRBVar>>&,
     std::vector<int>&,
     std::map<int, std::vector<int>>&,
-    std::unordered_map<int, int>&,
-    std::ostream&
+    std::unordered_map<int, int>&
 );
 
 

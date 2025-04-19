@@ -58,7 +58,6 @@ void resolve_greedy(
 
         // First release the resources that are no longer used
         release_idle_resources(
-            time_pos,
             available_machines,
             available_operators,
             release_calendar_machines[time_pos],

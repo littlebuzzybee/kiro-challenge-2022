@@ -352,8 +352,7 @@ void set_workers_time_exclusion_constraints(
     std::map<int, std::map<int, GRBVar>>& assigned_machines_per_task,
     std::vector<int>& processed_jobs,
     std::map<int, std::vector<int>>& processed_tasks_of_jobs,
-    std::unordered_map<int, int>& pending_task_per_job,
-    std::ostream& log_stream
+    std::unordered_map<int, int>& pending_task_per_job
 ) {
 
     std::map <std::pair<int, int>, GRBVar> tasks_overlapping_machines;
@@ -370,7 +369,6 @@ void set_workers_time_exclusion_constraints(
             // This means we consider each edge of the corresponding bipartite graph
             for (int t_idx1 : processed_tasks_of_jobs[*j_idx1_ptr]) {
                 for (int t_idx2 : processed_tasks_of_jobs[*j_idx2_ptr]) {
-                    // log_stream << "T" << t_idx1 + 1 << "-T" << t_idx2 + 1 << "; ";
                     // Compute temporarily the intersection of possible machines for the two tasks
                     std::vector<int> intersection_operators;
                     std::set_intersection(

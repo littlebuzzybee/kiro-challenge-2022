@@ -26,27 +26,45 @@
 
 
 int main(int argc, char* argv[]) {
-    std::string greetings = 
+    std::string greeting_header = 
         "================ Kiro 2022 Solver ================\n"
         "       A solver for the Kiro 2022 problem\n"
         "      with several algorithms to choose from.\n"
         "==================================================";
-    CLI::App app{ greetings };
+    CLI::App app{ greeting_header };
 
-
+    // Input instance
     std::filesystem::path input_filename;
-    CLI::Option* ifo = app.add_option("-f,--file", input_filename, "The JSON instance file to read from and solve");
-    ifo->required();
+    CLI::Option* ifo = app.add_option("-i,--input_file", input_filename, "The JSON instance file to read the problem from");
     ifo->check(CLI::ExistingFile.description("File must exist").active(false).name("file"));
     ifo->get_validator("file")->active();
 
+    // Output solution
     std::string output_filename;
-    CLI::Option* ofo = app.add_option("-o,--output", output_filename, "The log file to write the solution to");
+    CLI::Option* ofo = app.add_option("-o,--output_file", output_filename, "The JSON solution file to write the solution to");
+    ofo->required();
 
     bool write_problem_file{ false };
-    app.add_flag("-w,--write_solution", write_problem_file, "Write problem solution to file");
+    CLI::Option* wpb = app.add_flag("-w,--write_solution", write_problem_file, "Write problem solution to file");
+    wpb->default_val(false);
+    wpb->needs(ofo);
 
-    double solver_time_limit { 10.0 };
+    // Solving method
+    std::string method;
+    CLI::Option* mth = app.add_option("-m,--method", method, "Method to use for solving the problem");
+    mth->required();
+    mth->check(CLI::IsMember({ "solver", "greedy", "linprog", "traversal" }, CLI::ignore_case).description("Method must be one of: solver, greedy, linprog, traversal").active(false).name("method"));
+    mth->get_validator("method")->active();
+
+    // Logging redirection
+    std::string logging;
+    CLI::Option* log = app.add_option("-l,--logging", logging, "Log stream channeling");
+    log->check(CLI::IsMember({ "console", "file"}, CLI::ignore_case).description("Logging stream must be one of: console, file").active(false).name("type"));
+    log->get_validator("type")->active();
+    log->default_val("console");
+
+    // Solver options and parameters
+    double solver_time_limit { 5.0 };
     CLI::Option* stl = app.add_option("-t,--time_limit", solver_time_limit, "Time limit for each of Gurobi's steps in seconds");
     stl->default_val(10.0);
     stl->check(CLI::Number.description("Time limit must be a number").active(false).name("type"));
@@ -54,7 +72,7 @@ int main(int argc, char* argv[]) {
     stl->get_validator("type")->active();
     stl->get_validator("sign")->active();
 
-    int lookahead_duration { 2 };
+    int lookahead_duration { 1 };
     CLI::Option* lad = app.add_option("-k,--lookahead", lookahead_duration, "Lookahead duration in seconds");
     lad->default_val(2);
     lad->check(CLI::Number.description("Lookahead duration must be a number").active(false).name("type"));
@@ -72,20 +90,6 @@ int main(int argc, char* argv[]) {
     gto->check(CLI::PositiveNumber.description("Number of threads must be positive").active(false).name("sign"));
     gto->get_validator("type")->active();
     gto->get_validator("sign")->active();
-
-
-    std::string method;
-    CLI::Option* mth = app.add_option("-m,--method", method, "Method to use for solving the problem");
-    mth->required();
-    mth->check(CLI::IsMember({ "solver", "greedy", "linprog", "traversal" }, CLI::ignore_case).description("Method must be one of: solver, greedy, linprog, traversal").active(false).name("method"));
-    mth->get_validator("method")->active();
-
-
-    std::string logging;
-    CLI::Option* log = app.add_option("-l,--logging", logging, "Log stream channeling");
-    log->check(CLI::IsMember({ "console", "file"}, CLI::ignore_case).description("Logging stream must be one of: console, file").active(false).name("type"));
-    log->get_validator("type")->active();
-    log->default_val("console");
 
 
 
@@ -118,12 +122,12 @@ int main(int argc, char* argv[]) {
 
     // Set up the logging streams
     std::ostream* log_ptr = nullptr;
-    std::ofstream file_stream;
+    std::ofstream log_stream;
     if (logging == "console") {
         log_ptr = &std::cout;
     } else if (logging == "file") {
-        file_stream.open("./cpp_solver.log");
-        log_ptr = &file_stream;
+        log_stream.open("./cpp_solver.log");
+        log_ptr = &log_stream;
     } else {
         std::cerr << "Invalid logging option provided." << std::endl;
         exit(1);
@@ -132,8 +136,9 @@ int main(int argc, char* argv[]) {
     // std::ofstream log_solve("./cpp_solve.log");
     std::ostream& log_inform = std::cout;
 
-
-    Instance inst = import_instance(input_filename, log_solve);
+    // Set up the instance
+    Instance inst;
+    import_instance(inst, input_filename, log_solve);
 
     // Fill the jobs stacks with the tasks
     std::map<int, std::deque<int>> job_stacks;
@@ -158,8 +163,7 @@ int main(int argc, char* argv[]) {
 
 
     Solution sol;
-    // Initialize the solution's vectors
-
+    // Initialize the solution's vectors to dummy negative values (unset)
     // time variables
     sol.begin_time_tasks.assign(inst.nb_tasks, -1);
     sol.completion_date_jobs.assign(inst.nb_jobs, -1);
@@ -240,20 +244,27 @@ int main(int argc, char* argv[]) {
     }
     else {
         duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
-        log_inform << duration.count() + 1 << "s." << std::endl;
+        log_inform << duration.count() << "s." << std::endl;
     }
 
     // Check the validity of the solution
     if (check_validity(inst, sol)) {
         log_inform << "The solution is valid." << std::endl;
         sol.is_valid = true;
+        // Write the solution to a file
+        nlohmann::json json_solution;
+        if (write_problem_file) {
+            export_solution(sol, output_filename);
+        }
+
     }
     else {
         log_inform << "The solution is invalid." << std::endl;
     }
 
-    if (file_stream.is_open()) {
-        file_stream.close();
+
+    if (log_stream.is_open()) {
+        log_stream.close();
     }
 
     return 0;

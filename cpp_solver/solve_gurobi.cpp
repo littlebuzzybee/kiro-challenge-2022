@@ -198,8 +198,7 @@ void resolve_lookahead(
             assigned_machines_per_task,
             processed_jobs,
             processed_tasks_of_jobs,
-            pending_task_per_job,
-            log_stream
+            pending_task_per_job
         );
 
         // Define the resulting completion dates variable of each processed job

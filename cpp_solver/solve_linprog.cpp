@@ -36,8 +36,7 @@ void resolve_linprog(
     get_cumulative_remaining_time_per_job(
         cumulative_remaining_time_per_job,
         inst,
-        job_stacks,
-        next_time_persue_job
+        job_stacks
     );
 
     int time_pos{ 0 };
@@ -50,7 +49,6 @@ void resolve_linprog(
 
         // First release the resources that are no longer used
         release_idle_resources(
-            time_pos,
             available_machines,
             available_operators,
             release_calendar_machines[time_pos],

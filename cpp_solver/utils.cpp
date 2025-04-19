@@ -7,101 +7,10 @@ nlohmann::json read_json_file(std::string filename) {
     return data;
 }
 
-void print_set(std::set<int> s, int offset, std::ostream& out_stream) {
-    out_stream << "{";
-    for (auto& e : s) {
-        out_stream << e + offset;
-        if (e != *s.rbegin()) {
-            out_stream << ",";
-        }
-    }
-    out_stream << "}";
-}
 
-
-void print_sequence(std::vector<int> v, int offset, std::ostream& out_stream) {
-    out_stream << "[";
-    for (auto& t : v) {
-        out_stream << t + offset;
-        if (t != v.back()) {
-            out_stream << "->";
-        }
-    }
-    out_stream << "]";
-}
-
-
-void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream) {
-    // Print column headers
-    out_stream << "   ";
-    for (const auto& col : matrix.begin()->second) {
-        out_stream << std::setw(4) << col.first + 1;
-    }
-    out_stream << std::endl;
-
-    // Print rows
-    for (const auto& row : matrix) {
-        out_stream << std::setw(4) << row.first + 1 << ": ";
-        for (const auto& cell : row.second) {
-            if (cell.second == 3) {
-                out_stream << "\u00d7   ";
-            }
-            else if (cell.second == 2) {
-                out_stream << "o   ";
-            }
-            else if (cell.second == 1) {
-                out_stream << "m   ";
-            }
-            else {
-                out_stream << "    "; // Two spaces for proper alignment
-            }
-        }
-        out_stream << std::endl; // New line after each row
-    }
-}
-
-
-void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream) {
-    if (matrix.empty()) {
-        out_stream << "Matrix is empty.\n";
-        return;
-    }
-
-    // Determine the set of all column headers (keys of the innermost maps)
-    std::set<int> columns;
-    for (const auto& [outer_key, inner_map] : matrix) {
-        for (const auto& [inner_key, _] : inner_map) {
-            columns.insert(inner_key);
-        }
-    }
-
-    // Print the header row
-    out_stream << std::setw(4) << " "; // Leave space for row headers
-    for (int col : columns) {
-        out_stream << std::setw(4) << col;
-    }
-    out_stream << std::endl;
-
-    // Print each row
-    for (const auto& [row_key, inner_map] : matrix) {
-        out_stream << std::setw(4) << row_key; // Row header
-        for (int col : columns) {
-            auto it = inner_map.find(col);
-            if (it != inner_map.end()) {
-                out_stream << std::setw(4) << it->second; // Value in the cell
-            }
-            else {
-                out_stream << std::setw(4) << 0; // Default to 0 if no value exists
-            }
-        }
-        out_stream << std::endl;
-    }
-}
-
-Instance import_instance(std::filesystem::path filename, std::ostream& out_stream) {
+void import_instance(Instance& inst_object, std::filesystem::path filename, std::ostream& out_stream) {
     nlohmann::json inst_descriptor = read_json_file(filename.string());
 
-    Instance inst_object;
 
     inst_object.nb_jobs = inst_descriptor["parameters"]["size"]["nb_jobs"];
     inst_object.nb_tasks = inst_descriptor["parameters"]["size"]["nb_tasks"];
@@ -193,10 +102,123 @@ Instance import_instance(std::filesystem::path filename, std::ostream& out_strea
         // Add job object to instance
         inst_object.jobs.push_back(job_object);
     }
+}
+
+void export_solution(Solution& sol_object, std::filesystem::path filename) {
+    nlohmann::json data;
+    int nb_tasks = sol_object.begin_time_tasks.size();
+    assert(nb_tasks == sol_object.machine_choice_tasks.size());
+    assert(nb_tasks == sol_object.operator_choice_tasks.size());
+    for (int i = 0; i < nb_tasks; i++) {
+        nlohmann::json task;
+        task["task"] = i + 1;
+        task["start"] = sol_object.begin_time_tasks[i];
+        task["machine"] = sol_object.machine_choice_tasks[i] + 1;
+        task["operator"] = sol_object.operator_choice_tasks[i] + 1;
+        data.push_back(task);
+    }
+
+    std::ofstream out_file(filename);
+    if (!out_file) {
+        std::cerr << "Error opening file for writing." << std::endl;
+        return;
+    }
+
+    out_file << std::setw(4) << data << std::endl;
+    out_file.close();
+
+}
 
 
+void print_set(std::set<int> s, int offset, std::ostream& out_stream) {
+    out_stream << "{";
+    for (auto& e : s) {
+        out_stream << e + offset;
+        if (e != *s.rbegin()) {
+            out_stream << ",";
+        }
+    }
+    out_stream << "}";
+}
 
-    return inst_object;
+
+void print_sequence(std::vector<int> v, int offset, std::ostream& out_stream) {
+    out_stream << "[";
+    for (auto& t : v) {
+        out_stream << t + offset;
+        if (t != v.back()) {
+            out_stream << "->";
+        }
+    }
+    out_stream << "]";
+}
+
+
+void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream) {
+    // Print column headers
+    out_stream << "   ";
+    for (const auto& col : matrix.begin()->second) {
+        out_stream << std::setw(4) << col.first + 1;
+    }
+    out_stream << std::endl;
+
+    // Print rows
+    for (const auto& row : matrix) {
+        out_stream << std::setw(4) << row.first + 1 << ": ";
+        for (const auto& cell : row.second) {
+            if (cell.second == 3) {
+                out_stream << "\u00d7   ";
+            }
+            else if (cell.second == 2) {
+                out_stream << "o   ";
+            }
+            else if (cell.second == 1) {
+                out_stream << "m   ";
+            }
+            else {
+                out_stream << "    "; // Two spaces for proper alignment
+            }
+        }
+        out_stream << std::endl; // New line after each row
+    }
+}
+
+
+void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream& out_stream) {
+    if (matrix.empty()) {
+        out_stream << "Matrix is empty.\n";
+        return;
+    }
+
+    // Determine the set of all column headers (keys of the innermost maps)
+    std::set<int> columns;
+    for (const auto& [outer_key, inner_map] : matrix) {
+        for (const auto& [inner_key, _] : inner_map) {
+            columns.insert(inner_key);
+        }
+    }
+
+    // Print the header row
+    out_stream << std::setw(4) << " "; // Leave space for row headers
+    for (int col : columns) {
+        out_stream << std::setw(4) << col;
+    }
+    out_stream << std::endl;
+
+    // Print each row
+    for (const auto& [row_key, inner_map] : matrix) {
+        out_stream << std::setw(4) << row_key; // Row header
+        for (int col : columns) {
+            auto it = inner_map.find(col);
+            if (it != inner_map.end()) {
+                out_stream << std::setw(4) << it->second; // Value in the cell
+            }
+            else {
+                out_stream << std::setw(4) << 0; // Default to 0 if no value exists
+            }
+        }
+        out_stream << std::endl;
+    }
 }
 
 
@@ -242,8 +264,7 @@ void get_sort_tasks_and_scores(
 void get_cumulative_remaining_time_per_job(
     std::map<int, int>& cumulative_remaining_time_per_job,
     Instance& inst,
-    std::map<int, std::deque<int>>& job_stacks,
-    std::map<int, int>& next_time_persue_job
+    std::map<int, std::deque<int>>& job_stacks
 ) {
     for (auto& [j_idx, j_queue] : job_stacks) {
         int total_processing_time = std::reduce(
@@ -285,7 +306,6 @@ void fill_job_stacks_and_compute_time(
 }
 
 void release_idle_resources(
-    int time_pos,
     std::set<int>& available_machines,
     std::set<int>& available_operators,
     const std::set<int>& machines_to_release,
@@ -393,86 +413,3 @@ bool check_validity(const Instance& inst, const Solution& sol) {
     return true;
 }
 
-
-void node_analysis(const ExplorationNode& node, const Instance& inst, const Solution& sol) {
-    int nb_machines = static_cast<int>(node.available_machines.count());
-    int nb_operators = static_cast<int>(node.available_operators.count());
-    int nb_tasks = static_cast<int>(node.assigned_tasks.size());
-
-    // Detect whether or not the problem is overconstrained (i.e. if there are more tasks than machines or operators)
-    int ma_deficit = std::max(0, nb_tasks - nb_machines);
-    int op_deficit = std::max(0, nb_tasks - nb_operators);
-
-
-    // Laplacian of overlapping resources
-    arma::fmat tasks_ma_laplacian(nb_tasks, nb_tasks, arma::fill::zeros);
-    arma::fmat tasks_op_laplacian(nb_tasks, nb_tasks, arma::fill::zeros);
-
-    // Number of overlapping resources
-    arma::Mat<float> tasks_ma_overlap = arma::zeros<arma::Mat<float>>(nb_tasks, nb_tasks);
-    arma::Mat<float> tasks_op_overlap = arma::zeros<arma::Mat<float>>(nb_tasks, nb_tasks);
-
-    // Assemble adjacency and laplacian matrices
-    
-    for (int i = 0; i < nb_tasks; i++) {
-        int t1_idx = node.assigned_tasks[i];
-
-        int adjacency_degree_ma = 0;
-        int adjacency_degree_op = 0;
-
-        for (int j = i + 1; j < nb_tasks; j++) {
-            int t2_idx = node.assigned_tasks[j];
-
-            std::vector<int> common_machines{};
-            std::set_intersection(
-                inst.tasks[t1_idx].machines.begin(),
-                inst.tasks[t1_idx].machines.end(),
-                inst.tasks[t2_idx].machines.begin(),
-                inst.tasks[t2_idx].machines.end(),
-                std::back_inserter(common_machines)
-            );
-
-            std::vector<int> common_operators{};
-            std::set_intersection(
-                inst.tasks[t1_idx].machines.begin(),
-                inst.tasks[t1_idx].machines.end(),
-                inst.tasks[t2_idx].machines.begin(),
-                inst.tasks[t2_idx].machines.end(),
-                std::back_inserter(common_operators)
-            );
-
-            // Upper triangular part
-            tasks_ma_overlap(i, j) = static_cast<float>(common_machines.size());
-            tasks_op_overlap(i, j) = static_cast<float>(common_operators.size());
-            tasks_ma_laplacian(i, j) = common_machines.size() > 0 ? -1.0f : 0.0f;
-            tasks_op_laplacian(i, j) = common_operators.size() > 0 ? -1.0f : 0.0f;
-            // Lower triangular part
-            tasks_ma_overlap(j, i) = tasks_ma_overlap(i, j);
-            tasks_op_overlap(j, i) = tasks_ma_overlap(i, j);
-            tasks_ma_laplacian(j, i) = tasks_ma_laplacian(i, j);
-            tasks_op_laplacian(j, i) = tasks_op_laplacian(i, j);
-
-            adjacency_degree_ma += common_machines.size() > 0 ? -1 : 0;
-            adjacency_degree_op += common_machines.size() > 0 ? -1 : 0;
-        }
-
-        // Diagonal part
-        tasks_ma_overlap(i, i) = static_cast<float>(adjacency_degree_ma);
-        tasks_op_overlap(i, i) = static_cast<float>(adjacency_degree_op);
-    }
-    
-
-    arma::fmat U;
-    arma::fvec s;
-    arma::fmat V;
-
-    arma::svd(U, s, V, tasks_ma_laplacian);
-    // detect multiplicity of 0 as the number of zero eigenvalues
-    int multiplicity = 0;
-    for (int i = 0; i < s.n_elem; i++) {
-        if (s(i) < 1e-5) { multiplicity++; }
-    }
-
-
-
-}

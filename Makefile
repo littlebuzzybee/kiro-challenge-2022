@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS := -std=c++20 -Wall -Wextra -march=native
+CXXFLAGS := -std=c++23 -Wall -Wextra -march=native
 
 OPTIONAL_FLAGS := -Werror -fanalyzer -pedantic
 INDIVIDUAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs 
@@ -33,8 +33,8 @@ debug: CXXFLAGS += -g3 -O0 #  -g0..3 (g default), pg is for gprof
 debug: scheduler
 
 # a rule for building the program fully optimized and release it
-build: CXXFLAGS += -O3 -Os -DNDEBUG -fopt-info-vec -mavx -mavx2 -msse -msse3 -msse4.1 -mssse3 -msse2 -fopenmp
-build: scheduler
+release: CXXFLAGS += -O3 -Os -DNDEBUG -mavx -mavx2 -msse -msse3 -msse4.1 -mssse3 -msse2 -fopenmp -fopt-info-vec
+release: scheduler
 
 # a rule for profiling the program
 profile: CXXFLAGS += -pg -O2
@@ -61,17 +61,21 @@ $(BIN_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 
 INSTANCES_DIR = instances
+SOLUTIONS_DIR = solutions
 PROFILING_DIR = profiling
+
+ARGS = --input_file=$(INSTANCES_DIR)/tiny.json --method=linprog --output_file=$(SOLUTIONS_DIR)/tiny_sol.json -w
 
 clean:
 	rm -f $(BIN_DIR)/*.o
 
 test:	
-	$(BIN_DIR)/scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=4 --time_limit=10.0
+	$(BIN_DIR)/scheduler.o $(ARGS)
 
 analyse:
-	$(BIN_DIR)/scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=1 --time_limit=10.0
+	$(BIN_DIR)/scheduler.o $(ARGS)
 	gprof $(BIN_DIR)/scheduler.o | ./gprof2dot.py | dot -Tpdf -o $(PROFILING_DIR)/output.pdf
 
 gprof:
-	$(BIN_DIR)/scheduler.o $(INSTANCES_DIR)/tiny.json --lookahead=10 --gurobi_threads=1 --time_limit=10.0 && gprof -q $(BIN_DIR)/scheduler.o gmon.out > $(PROFILING_DIR)/analysis.txt
+	$(BIN_DIR)/scheduler.o $(ARGS)
+	gprof -q $(BIN_DIR)/scheduler.o gmon.out > $(PROFILING_DIR)/analysis.txt

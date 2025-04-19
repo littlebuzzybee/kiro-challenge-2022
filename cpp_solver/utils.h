@@ -78,7 +78,10 @@ struct ExplorationNode {
 };
 
 nlohmann::json read_json_file(std::string);
-Instance import_instance(std::filesystem::path, std::ostream&);
+
+void import_instance(Instance&, std::filesystem::path, std::ostream&);
+
+void export_solution(Solution&, std::filesystem::path);
 
 void print_set(std::set<int>, int, std::ostream&);
 
@@ -102,8 +105,7 @@ void get_sort_tasks_and_scores(
 void get_cumulative_remaining_time_per_job(
     std::map<int, int>&,
     Instance&,
-    std::map<int, std::deque<int>>&,
-    std::map<int, int>&
+    std::map<int, std::deque<int>>&
 );
 
 void fill_job_stacks_and_compute_time(
@@ -113,7 +115,6 @@ void fill_job_stacks_and_compute_time(
 );
 
 void release_idle_resources(
-    int,
     std::set<int>&,
     std::set<int>&,
     const std::set<int>&,
