@@ -1,5 +1,6 @@
 #include "solve_traversal.h"
 
+#define DEBUG 0
 
 void resolve_traversal(
     Instance& inst,
@@ -139,10 +140,11 @@ void resolve_traversal(
             continue;
         }
 
+        #ifndef DEBUG
         /* BUILDING A DECISION PROCESS USING LINEAR PROGRAMMING */
         log_stream << "Selecting workers from the pool with a linear programming approach..." << std::endl;
         // ====== Create the GLOP solver ======
-        std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("SCIP"));
+        std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("GLOP"));
         if (!solver) {
             log_stream << "Solver not created. Exiting..." << std::endl;
             continue;
@@ -151,8 +153,6 @@ void resolve_traversal(
         // ====== Create decision variables ======
         std::vector<operations_research::MPVariable*> workers_vars{};
         for (int i = 0; i < nb_workers; i++) {
-            int m_idx = std::get<0>(workers_pool[i]);
-            int o_idx = std::get<1>(workers_pool[i]);
 
             workers_vars.emplace_back(
                 solver->MakeIntVar(
@@ -192,7 +192,7 @@ void resolve_traversal(
 
 
         // ====== Create the objective function ======
-        operations_research::MPObjective* objective = solver->MutableObjective();
+        operations_research::MPObjective* const objective = solver->MutableObjective();
         for (int i = 0; i < nb_candidate_tasks; i++) {
             int t_idx = std::get<1>(candidate_tasks[i]); // pas bon
             float score = std::get<0>(candidate_tasks[i]);
@@ -244,7 +244,7 @@ void resolve_traversal(
         log_stream << "}" << std::endl;
 
 
-
+#endif
         /* BUILDING A DECISION PROCESS USING LINEAR ALGEBRA */
         log_stream << "Selecting workers from the pool with a weighted pruning approach..." << std::endl;
 

@@ -13,3 +13,7 @@ __pycache__/
 *.jpg
 *.dot
 *.png
+*/CMakeFiles/*
+cpp_solver/build/*
+cpp_solver/objects/*
+cpp_solver/*.json

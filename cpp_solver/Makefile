@@ -45,7 +45,7 @@ simple: CXXFLAGS += -Os
 simple: scheduler
 
 
-SRC_DIR = cpp_solver
+SRC_DIR = .
 BIN_DIR = $(SRC_DIR)/objects
 
 SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve_gurobi.cpp $(SRC_DIR)/solve_greedy.cpp $(SRC_DIR)/solve_linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/breakdown.cpp $(SRC_DIR)/solve_traversal.cpp
@@ -60,11 +60,11 @@ $(BIN_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 
 
-INSTANCES_DIR = instances
-SOLUTIONS_DIR = solutions
-PROFILING_DIR = profiling
+INSTANCES_DIR = ../instances
+SOLUTIONS_DIR = ../solutions
+PROFILING_DIR = ..:profiling
 
-ARGS = --input_file=$(INSTANCES_DIR)/huge.json --method=traversal --output_file=$(SOLUTIONS_DIR)/tiny_sol.json -w
+ARGS = --input_file=$(INSTANCES_DIR)/medium.json --method=traversal --output_file=$(SOLUTIONS_DIR)/tiny_sol.json -w
 
 clean:
 	rm -f $(BIN_DIR)/*.o

@@ -17,7 +17,7 @@
 #include "solve_greedy.h"
 #include "solve_linprog.h"
 #include "solve_traversal.h"
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 #include "CLI/CLI.hpp"
 
 
@@ -42,7 +42,6 @@ int main(int argc, char* argv[]) {
     // Output solution
     std::string output_filename;
     CLI::Option* ofo = app.add_option("-o,--output_file", output_filename, "The JSON solution file to write the solution to");
-    ofo->required();
 
     bool write_problem_file{ false };
     CLI::Option* wpb = app.add_flag("-w,--write_solution", write_problem_file, "Write problem solution to file");

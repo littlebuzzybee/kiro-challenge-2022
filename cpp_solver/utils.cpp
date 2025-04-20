@@ -251,9 +251,10 @@ void get_sort_tasks_and_scores(
         int proj_overhead = proj_completion - inst.jobs[j_idx].due_date;
         int proj_tardiness = std::max(0, proj_overhead);
         int proj_penalty = proj_tardiness > 0 ? 1 : 0;
-        float score = std::sqrt(inst.jobs[j_idx].weight * (proj_completion + inst.tardiness * proj_tardiness + inst.unit_penalty * proj_penalty) + .1f);
+        float score = inst.jobs[j_idx].weight * (proj_completion + inst.tardiness * proj_tardiness + inst.unit_penalty * proj_penalty) + .1f;
+
         // the higher the score, the higher the priority to avoid accumulation of tardiness
-        candidate_tasks.emplace_back(std::make_tuple(score, t_idx));
+        candidate_tasks.emplace_back(score, t_idx);
     }
 
     // Sort the candidate tasks by highest priority to get the most urgent tasks first (those with the highest tardiness score so far)
