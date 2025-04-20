@@ -35,19 +35,13 @@ void resolve_greedy(
         next_time_persue_job[j_idx] = inst.jobs[j_idx].release_date;
     }
 
+    // Compute the cumulative remaining time for each job
     std::map<int, int> cumulative_remaining_time_per_job;
-    for (auto& [j_idx, _] : job_stacks) {
-        std::deque<int>& remaining_tasks_sequence = job_stacks[j_idx];
-        int total_processing_time = std::reduce(
-            remaining_tasks_sequence.begin(),
-            remaining_tasks_sequence.end(),
-            0, // Initial value of the sum
-            [&inst](int total_sum, int t_idx) {
-                return total_sum + inst.tasks[t_idx].processing_time;
-            }
-        );
-        cumulative_remaining_time_per_job[j_idx] = total_processing_time;
-    }
+    get_cumulative_remaining_time_per_job(
+        cumulative_remaining_time_per_job,
+        inst,
+        job_stacks
+    );
 
     int time_pos{ time_cursor };
 

@@ -104,7 +104,7 @@ void resolve_linprog(
         log_stream << " }" << std::endl;
 
         // ====== Create the GLOP solver ======
-        std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("SCIP"));
+        std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("GLOP"));
         if (!solver) {
             log_stream << "Solver not created. Exiting..." << std::endl;
             return;

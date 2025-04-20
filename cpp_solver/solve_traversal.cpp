@@ -93,21 +93,20 @@ void resolve_traversal(
             continue;
         }
 
+        // Compute the characteristics of the available workers pool this round
+        const int nb_candidate_tasks = static_cast<int>(candidate_tasks.size());
+
         // Sort the candidate tasks by highest priority to get the most urgent tasks first (those with the highest tardiness score so far)
         std::sort(candidate_tasks.begin(), candidate_tasks.end(), std::greater<std::tuple<int, int>>());
 
         // Display the candidate tasks
-        log_stream << std::endl << "There are " << candidate_tasks.size() << " candidate tasks for processing (priority score):" << std::endl << " { ";
+        log_stream << std::endl << "There are " << nb_candidate_tasks << " candidate tasks for processing (priority score):" << std::endl << " { ";
         for (auto& [score, t_idx] : candidate_tasks) {
             log_stream << "T" << t_idx + 1 << "(" << score << ") ";
         }
-        log_stream << "}" << std::endl;
-
-        // Compute the characteristics of the available workers pool this round
-        int nb_candidate_tasks = static_cast<int>(candidate_tasks.size());
+        log_stream << "}" << std::endl << std::endl;
 
 
-        /* BUILDING A DECISION PROCESS USING LINEAR ALGEBRA */
 
         // Enumerate the pool of available resources/workers onve for all this time step
         std::vector<std::tuple<int, int>> workers_pool{};
@@ -115,6 +114,7 @@ void resolve_traversal(
         // Also create a map for finding the workers indexes by their (machine, operator) pair
         std::map<std::tuple<int, int>, int> worker2poolindex_map{};
 
+        // Detect all workers
         for (auto& [_, t_idx] : candidate_tasks) {
             for (auto& m_idx : inst.tasks[t_idx].machines) {
                 // Check if the machine is available
@@ -122,12 +122,16 @@ void resolve_traversal(
                 for (auto& o_idx : inst.tasks[t_idx].compatibility[m_idx]) {
                     // Check if the operator is available
                     if (!available_operators.contains(o_idx)) { continue; }
-                    workers_pool.emplace_back(m_idx, o_idx);
-                    worker2poolindex_map[std::make_tuple(m_idx, o_idx)] = static_cast<int>(workers_pool.size() - 1);
+
+                    // Check if the worker was not already added
+                    if (!worker2poolindex_map.contains(std::make_tuple(m_idx, o_idx))) {
+                        workers_pool.emplace_back(std::make_tuple(m_idx, o_idx));
+                        worker2poolindex_map[std::make_tuple(m_idx, o_idx)] = static_cast<int>(workers_pool.size() - 1);
+                    }
                 }
             }
         }
-        int nb_workers = static_cast<int>(workers_pool.size());
+        const int nb_workers = static_cast<int>(workers_pool.size());
 
         if (nb_workers == 0) {
             log_stream << "No workers available for the candidate tasks. Continuing." << std::endl;
@@ -135,6 +139,114 @@ void resolve_traversal(
             continue;
         }
 
+        /* BUILDING A DECISION PROCESS USING LINEAR PROGRAMMING */
+        log_stream << "Selecting workers from the pool with a linear programming approach..." << std::endl;
+        // ====== Create the GLOP solver ======
+        std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("SCIP"));
+        if (!solver) {
+            log_stream << "Solver not created. Exiting..." << std::endl;
+            continue;
+        }
+
+        // ====== Create decision variables ======
+        std::vector<operations_research::MPVariable*> workers_vars{};
+        for (int i = 0; i < nb_workers; i++) {
+            int m_idx = std::get<0>(workers_pool[i]);
+            int o_idx = std::get<1>(workers_pool[i]);
+
+            workers_vars.emplace_back(
+                solver->MakeIntVar(
+                    0.0,
+                    1.0,
+                    "W" + std::to_string(i)
+                )
+            );
+        }
+
+        // ====== Create constraints ======
+        std::vector<operations_research::MPConstraint*> workers_cstr{};
+        for (int i = 0; i < nb_workers; i++) {
+            for (int j = i + 1; j < nb_workers; j++) {
+
+                int m_idx1 = std::get<0>(workers_pool[i]);
+                int o_idx1 = std::get<1>(workers_pool[i]);
+                int m_idx2 = std::get<0>(workers_pool[j]);
+                int o_idx2 = std::get<1>(workers_pool[j]);
+
+                if (m_idx1 == m_idx2 || o_idx1 == o_idx2) {
+                    // Create one constraint for the pair, they are incompatible
+                    workers_cstr.emplace_back(
+                        solver->MakeRowConstraint(
+                            0.0,
+                            1.0
+                        )
+                    );
+
+                    // No more than one of both conflicting workers can be used at the same time
+
+                    workers_cstr.back()->SetCoefficient(workers_vars[i], 1.0);
+                    workers_cstr.back()->SetCoefficient(workers_vars[j], 1.0);
+                }
+            }
+        }
+
+
+        // ====== Create the objective function ======
+        operations_research::MPObjective* objective = solver->MutableObjective();
+        for (int i = 0; i < nb_candidate_tasks; i++) {
+            int t_idx = std::get<1>(candidate_tasks[i]); // pas bon
+            float score = std::get<0>(candidate_tasks[i]);
+
+            for (auto& m_idx : inst.tasks[t_idx].machines) {
+                for (auto& o_idx : inst.tasks[t_idx].compatibility[m_idx]) {
+
+                    int w_idx = worker2poolindex_map[std::make_tuple(m_idx, o_idx)];
+                    double coef = objective->GetCoefficient(workers_vars[w_idx]);
+                    coef += static_cast<double>(score);
+                    objective->SetCoefficient(workers_vars[i], coef);
+                }
+            }
+        }
+
+        objective->SetMaximization();
+
+
+        log_stream << "Linear Program has " << solver->NumVariables() << " variables & " << solver->NumConstraints() << " constraints." << std::endl;
+
+        const operations_research::MPSolver::ResultStatus result_status = solver->Solve();
+
+        // Check that the problem has an optimal solution.
+        if (result_status != operations_research::MPSolver::FEASIBLE && result_status != operations_research::MPSolver::OPTIMAL) {
+            log_stream << "The problem does not have a feasible or optimal solution!" << std::endl;
+        }
+
+        log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations" << std::endl;
+        log_stream << "Total objective: " << objective->Value() << std::endl;
+
+        int nb_selected_workers = 0;
+        for (int i = 0; i < nb_workers; i++) {
+            operations_research::MPVariable* w_var_ptr = workers_vars[i];
+            if (w_var_ptr->solution_value() > 0.5) {
+                nb_selected_workers++;
+            }
+        }
+        log_stream << std::endl << "Solving selected " << nb_selected_workers << "/" << nb_workers << " compatible workers (" << static_cast<float>(nb_selected_workers) / static_cast<float>(nb_workers) * 100.0f << "%):" << std::endl << " { ";
+
+        for (int i = 0; i < nb_workers; i++) {
+            operations_research::MPVariable* w_var_ptr = workers_vars[i];
+
+            if (w_var_ptr->solution_value() > 0.5) {
+                int w_m_idx = std::get<0>(workers_pool[i]);
+                int w_o_idx = std::get<1>(workers_pool[i]);
+                log_stream << "M" << w_m_idx + 1 << "_O" << w_o_idx + 1 << " ";
+            }
+        }
+        log_stream << "}" << std::endl;
+
+
+
+        /* BUILDING A DECISION PROCESS USING LINEAR ALGEBRA */
+        log_stream << "Selecting workers from the pool with a weighted pruning approach..." << std::endl;
 
         // Create a conflict matrix between all workers this round
         arma::SpMat<float> W_conflicts = arma::zeros<arma::SpMat<float>>(nb_workers, nb_workers);
@@ -165,11 +277,12 @@ void resolve_traversal(
         for (int i = 0; i < nb_candidate_tasks; i++) {
             int t_idx = std::get<1>(candidate_tasks[i]);
             task2poolindex_map[t_idx] = i;
+            // Only iterate over the task's known workers instead of going through all those the workers pool
             for (auto& m_idx : inst.tasks[t_idx].machines) {
                 for (auto& o_idx : inst.tasks[t_idx].compatibility[m_idx]) {
                     // Check if the worker is available
                     auto worker = std::make_tuple(m_idx, o_idx);
-                    if (!worker2poolindex_map.contains(worker)) { continue; }
+
                     int w_idx = worker2poolindex_map[worker];
                     T_W_compat(i, w_idx) = 1.0f;
                 }
@@ -200,7 +313,7 @@ void resolve_traversal(
         opts.maxiter = 1000;
         opts.tol = 1e-5;
         int nb_eigenvalues = W_conflicts_laplacian.n_rows > 5 ? 5 : W_conflicts_laplacian.n_rows - 1;
-        log_stream << "Computing " << nb_eigenvalues << " eigenvalues of the laplacian matrix...";
+        log_stream << std::endl << "Computing " << nb_eigenvalues << " eigenvalues of the laplacian matrix...";
         arma::eigs_sym(eigval, eigvec, W_conflicts_laplacian, nb_eigenvalues, "sa");
 
         int multiplicity = 0;
@@ -211,6 +324,7 @@ void resolve_traversal(
 
         log_stream << " Done." << std::endl;
         log_stream << "There are " << nb_workers << " workers available with given resources in >= " << multiplicity << " connected components." << std::endl;
+
 
         // Defining some variables to store for the elimination heuristics loop
         arma::Col<float> T_mult; // Assignment multiplicity of the tasks
@@ -283,13 +397,16 @@ void resolve_traversal(
             nb_conflicts = static_cast<int>(.5f * arma::dot(active_workers, W_conflicts * active_workers));
             nb_elim_rounds++;
         }
+        log_stream << "\rConflicts remaining: " << nb_conflicts << std::flush;
         log_stream << " Done. (" << nb_elim_rounds << " rounds)" << std::endl;
 
         // We have now eliminated all conflicts, all remaining workers are compatible
         // We can now assign them to tasks
 
-        log_stream << "Pruning has eliminated " << nb_workers - static_cast<int>(arma::sum(active_workers)) << " workers." << std::endl;
-        log_stream << std::endl << "There are " << arma::sum(active_workers) << " selected compatible workers remaining:" << std::endl << " { ";
+        int nb_active_workers = static_cast<int>(arma::sum(active_workers));
+        // log_stream << "Pruning has eliminated " << nb_workers - nb_active_workers << " workers." << std::endl;
+        log_stream << std::endl << "Pruning selected " << nb_active_workers << "/" << nb_workers << " compatible workers (" << static_cast<float>(nb_active_workers) / static_cast<float>(nb_workers) * 100.0f << "%):" << std::endl << " { ";
+
         for (int i = 0; i < nb_workers; i++) {
             if (active_workers(i) > 0.5f) {
                 int w_m_idx = std::get<0>(workers_pool[i]);
@@ -299,6 +416,9 @@ void resolve_traversal(
         }
         log_stream << "}" << std::endl;
 
+
+
+        /* ASSIGNING WORKERS TO TASKS WITH THE DECIDED WORKERS */
 
         // Update the compatibility matrix with the remaining active workers
         T_W_compat.each_row() % active_workers.t();

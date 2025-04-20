@@ -64,7 +64,7 @@ INSTANCES_DIR = instances
 SOLUTIONS_DIR = solutions
 PROFILING_DIR = profiling
 
-ARGS = --input_file=$(INSTANCES_DIR)/tiny.json --method=linprog --output_file=$(SOLUTIONS_DIR)/tiny_sol.json -w
+ARGS = --input_file=$(INSTANCES_DIR)/huge.json --method=traversal --output_file=$(SOLUTIONS_DIR)/tiny_sol.json -w
 
 clean:
 	rm -f $(BIN_DIR)/*.o

@@ -105,7 +105,7 @@ void import_instance(Instance& inst_object, std::filesystem::path filename, std:
 }
 
 void export_solution(Solution& sol_object, std::filesystem::path filename) {
-    nlohmann::json data;
+    nlohmann::json sol_descriptor;
     int nb_tasks = sol_object.begin_time_tasks.size();
     assert(nb_tasks == sol_object.machine_choice_tasks.size());
     assert(nb_tasks == sol_object.operator_choice_tasks.size());
@@ -115,7 +115,7 @@ void export_solution(Solution& sol_object, std::filesystem::path filename) {
         task["start"] = sol_object.begin_time_tasks[i];
         task["machine"] = sol_object.machine_choice_tasks[i] + 1;
         task["operator"] = sol_object.operator_choice_tasks[i] + 1;
-        data.push_back(task);
+        sol_descriptor.push_back(task);
     }
 
     std::ofstream out_file(filename);
@@ -124,7 +124,7 @@ void export_solution(Solution& sol_object, std::filesystem::path filename) {
         return;
     }
 
-    out_file << std::setw(4) << data << std::endl;
+    out_file << std::setw(4) << sol_descriptor << std::endl;
     out_file.close();
 
 }
