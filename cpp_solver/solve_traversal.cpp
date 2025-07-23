@@ -140,7 +140,7 @@ void resolve_traversal(
             continue;
         }
 
-        #ifndef DEBUG
+#if DEBUG
         /* BUILDING A DECISION PROCESS USING LINEAR PROGRAMMING */
         log_stream << "Selecting workers from the pool with a linear programming approach..." << std::endl;
         // ====== Create the GLOP solver ======
@@ -218,6 +218,7 @@ void resolve_traversal(
         // Check that the problem has an optimal solution.
         if (result_status != operations_research::MPSolver::FEASIBLE && result_status != operations_research::MPSolver::OPTIMAL) {
             log_stream << "The problem does not have a feasible or optimal solution!" << std::endl;
+            return;
         }
 
         log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations" << std::endl;
@@ -230,6 +231,7 @@ void resolve_traversal(
                 nb_selected_workers++;
             }
         }
+
         log_stream << std::endl << "Solving selected " << nb_selected_workers << "/" << nb_workers << " compatible workers (" << static_cast<float>(nb_selected_workers) / static_cast<float>(nb_workers) * 100.0f << "%):" << std::endl << " { ";
 
         for (int i = 0; i < nb_workers; i++) {
@@ -242,9 +244,9 @@ void resolve_traversal(
             }
         }
         log_stream << "}" << std::endl;
-
-
 #endif
+
+
         /* BUILDING A DECISION PROCESS USING LINEAR ALGEBRA */
         log_stream << "Selecting workers from the pool with a weighted pruning approach..." << std::endl;
 
@@ -289,6 +291,9 @@ void resolve_traversal(
             }
         }
 
+        // Display number of entries in the compatibility matrix
+        log_stream << "Compatibility matrix has " << arma::accu(T_W_compat) << " nonzero entries." << std::endl;
+
 
         // Create a task scores vector
         arma::Col<float> T_scores = arma::zeros<arma::Col<float>>(nb_candidate_tasks);
@@ -317,7 +322,7 @@ void resolve_traversal(
         arma::eigs_sym(eigval, eigvec, W_conflicts_laplacian, nb_eigenvalues, "sa");
 
         int multiplicity = 0;
-        for (int i = 0; i < eigval.n_elem; i++) {
+        for (int i = 0; i < static_cast<int>(eigval.n_elem); i++) {
             if (eigval(i) < 1e-5) { multiplicity++; }
         }
 

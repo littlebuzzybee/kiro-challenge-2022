@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS := -std=c++23 -Wall -Wextra -march=native
+CXXFLAGS := -std=c++20 -Wall -Wextra -march=native
 
 OPTIONAL_FLAGS := -Werror -fanalyzer -pedantic
 INDIVIDUAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs 
@@ -18,25 +18,29 @@ HIGHS_LIB = /opt/highs-1.10.0/lib
 
 JSON_INCLUDE = ./nlohmann
 
-INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE) -I$(ORTOOLS_INCLUDE) -I$(HIGHS_INCLUDE)
-LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE) -L$(ORTOOLS_LIB) -L$(HIGHS_LIB)
+INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE) -I$(ORTOOLS_INCLUDE) # -I$(HIGHS_INCLUDE)
+LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE) -L$(ORTOOLS_LIB) # -L$(HIGHS_LIB)
 
 
-# Library linking
-LDLIBS = -lgurobi_c++ -lgurobi120 -ltbb -lpthread -lstdc++fs -lortools -llapack -lblas -larmadillo -lhighs
+# Library 
+LDLIBS = -lgurobi_c++ -lgurobi120 -lortools -llapack -lblas -larmadillo # -lhighs
+
+# Library dependencies
+LDLIBS += -lpthread -lm -ldl -lrt -lstdc++fs -ltbb
 
 
 
 
 # a rule for building the program with full debug information
-debug: CXXFLAGS += -g3 -O0 #  -g0..3 (g default), pg is for gprof
+debug: CXXFLAGS += -g3 -Og #  -g0..3 (g default)
 debug: scheduler
 
 # a rule for building the program fully optimized and release it
-release: CXXFLAGS += -O3 -Os -DNDEBUG -mavx -mavx2 -msse -msse3 -msse4.1 -mssse3 -msse2 -fopenmp -fopt-info-vec
+release: CXXFLAGS += -O3 -DNDEBUG -DPARALLEL -fopenmp -fopt-info-vec=vec.opt
 release: scheduler
+# -mavx2 -msse4.1 -mavx -msse -msse3 -mssse3 -msse2
 
-# a rule for profiling the program
+# a rule for profiling the program, pg is for gprof
 profile: CXXFLAGS += -pg -O2
 profile: scheduler
 

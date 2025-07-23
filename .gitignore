@@ -17,3 +17,4 @@ __pycache__/
 cpp_solver/build/*
 cpp_solver/objects/*
 cpp_solver/*.json
+build/*

@@ -16,7 +16,6 @@ void import_instance(Instance& inst_object, std::filesystem::path filename, std:
     inst_object.nb_tasks = inst_descriptor["parameters"]["size"]["nb_tasks"];
     inst_object.nb_machines = inst_descriptor["parameters"]["size"]["nb_machines"];
     inst_object.nb_operators = inst_descriptor["parameters"]["size"]["nb_operators"];
-
     inst_object.unit_penalty = inst_descriptor["parameters"]["costs"]["unit_penalty"];
     inst_object.tardiness = inst_descriptor["parameters"]["costs"]["tardiness"];
     inst_object.interim = inst_descriptor["parameters"]["costs"]["interim"];
@@ -223,11 +222,9 @@ void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream
 
 
 bool all_stacks_are_empty(const std::map<int, std::deque<int>>& stacks) {
-    for (const auto& pair : stacks) {
-        if (!pair.second.empty()) {
-            return false;
-        }
-    }
+    std::all_of(stacks.begin(), stacks.end(), [](const auto& pair) {
+        return pair.second.empty();
+        });
     return true;
 }
 
