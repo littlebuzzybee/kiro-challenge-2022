@@ -506,3 +506,161 @@ class Gurobi_Problem:
             print(f"Problem saved to {path}")
         except:
             print(f"Failed saving to file!")
+
+
+
+from itertools import combinations
+
+
+def export_to_dot_separated(inst, tasks, filename):
+    with open(filename, "w") as f:
+        f.write("graph InstanceGraph {\n")  # Using directed graph
+        f.write("bgcolor=\"lightgray\"\n")
+        f.write("overlap=false;\n")  # Prevents node overlap
+        f.write("splines=true;\n")   # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")    # Increases vertical separation
+
+        # Create nodes
+        for t in tasks:
+            color = "lightblue"
+            j_of_t = inst.tasks[t].j
+            f.write(f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n')
+
+        for t1_id, t2_id in combinations(tasks, 2):
+            if inst.tasks[t1_id].j == inst.tasks[t2_id].j:
+                continue
+            # Create edges for shared machines (undirected)
+            # compute the intersection of their machines
+            w1 = set([w.mid for w in inst.tasks[t1_id].workers])
+            w2 = set([w.mid for w in inst.tasks[t2_id].workers])
+            shared_machines = w1.intersection(w2)
+
+            for m in shared_machines:
+                f.write(f'    {t1_id} -- {t2_id} [label=M{m},color="blue"];\n')
+
+            # Create edges for shared individual operators (undirected)
+            # compute the intersection of their operators
+            w1 = set([w.oid for w in inst.tasks[t1_id].workers])
+            w2 = set([w.oid for w in inst.tasks[t2_id].workers])
+            shared_operators = w1.intersection(w2)
+            for o in shared_operators:
+                f.write(f'    {t1_id} -- {t2_id} [label=O{o}, color="red"];\n')
+        f.write("}\n")
+
+def export_to_dot_pairs(inst, tasks, filename):
+    with open(filename, "w") as f:
+        f.write("graph InstanceGraph {\n")  # Using directed graph
+        f.write("bgcolor=\"lightgray\"\n")
+        f.write("overlap=false;\n")  # Prevents node overlap
+        f.write("splines=true;\n")   # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")    # Increases vertical separation
+
+        # Create nodes
+        for t in tasks:
+            color = "lightgreen"
+            j_of_t = inst.tasks[t].j
+            f.write(f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n')
+
+        # Create edges for shared individual workers (undirected)
+        for t1_id, t2_id in combinations(tasks, 2):
+            if inst.tasks[t1_id].j == inst.tasks[t2_id].j:
+                continue
+            # compute the intersection of their workers
+            w1 = set((w.mid, w.oid) for w in inst.tasks[t1_id].workers)
+            w2 = set((w.mid, w.oid) for w in inst.tasks[t2_id].workers)
+            shared_workers = w1.intersection(w2)
+
+            for sw in shared_workers:
+                f.write(f'    {t1_id} -- {t2_id} [label=M{sw[0]}O{sw[1]}, color="black"];\n')
+        f.write("}\n")
+
+
+def export_to_dot_sets(inst, tasks, filename):
+    with open(filename, "w") as f:
+        f.write("graph InstanceGraph {\n")  # Using directed graph
+        f.write("bgcolor=\"lightgray\"\n")
+        f.write("overlap=false;\n")  # Prevents node overlap
+        f.write("splines=true;\n")   # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")    # Increases vertical separation
+
+        # Create nodes
+        for t in tasks:
+            color = "lightgreen"
+            j_of_t = inst.tasks[t].j
+            f.write(f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n')
+
+        edges_ma_dicts = {}
+        edges_op_dicts = {}
+        for t1_id, t2_id in combinations(tasks, 2):
+            if inst.tasks[t1_id].j == inst.tasks[t2_id].j:
+                continue
+            # Create edges for shared machines (undirected)
+            # compute the intersection of their machines
+            w1 = set([w.mid for w in inst.tasks[t1_id].workers])
+            w2 = set([w.mid for w in inst.tasks[t2_id].workers])
+            shared_machines = w1.intersection(w2)
+            edges_ma_dicts[(t1_id, t2_id)] = shared_machines
+
+
+            # Create edges for shared individual operators (undirected)
+            # compute the intersection of their operators
+            w1 = set([w.oid for w in inst.tasks[t1_id].workers])
+            w2 = set([w.oid for w in inst.tasks[t2_id].workers])
+            shared_operators = w1.intersection(w2)
+            edges_op_dicts[(t1_id, t2_id)] = shared_operators
+
+        for ((t1_id, t2_id), sm) in edges_ma_dicts.items():
+            if len(sm) > 0:
+                f.write(f'    {t1_id} -- {t2_id} [label="M{str(sm)}", color="blue", penwidth={len(sm)}];\n')
+        for ((t1_id, t2_id), so) in edges_op_dicts.items():
+            if len(so) > 0:
+                f.write(f'    {t1_id} -- {t2_id} [label="O{str(so)}", color="red", penwidth={len(so)}];\n')
+        f.write("}\n")
+
+def export_incompatibilities(inst, tasks, filename, display_tasks=False):
+    with open(filename, "w") as f:
+        f.write("graph InstanceGraph {\n")  # Using directed graph
+        f.write("bgcolor=\"lightgray\"\n")
+        f.write("overlap=false;\n")  # Prevents node overlap
+        f.write("splines=true;\n")   # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")    # Increases vertical separation
+
+        # Create nodes of workers
+        worker_nodes = set()
+        for t in tasks:
+            for w in inst.tasks[t].workers:
+                combination = (w.mid, w.oid)
+                if combination not in worker_nodes:
+                    h = hash(combination)
+                    worker_nodes.add(combination)
+                    f.write(f'    {h} [label="M{w.mid}O{w.oid}", shape="ellipse", style="filled", fillcolor="lightblue"];\n')
+
+        # Create edges for incompatible workers
+        edges = set()
+        for w1, w2 in combinations(worker_nodes, 2):
+            if w1[0] == w2[0] or w1[1] == w2[1]:
+                # Create edges for these workers
+                edges.add((w1, w2))
+                h1 = hash(w1)
+                h2 = hash(w2)
+                f.write(f'    {h1} -- {h2} [color="blue"];\n')
+        f.write("}\n")
+
+        
+        # create nodes of tasks
+        if display_tasks:
+            for t in tasks:
+                j_of_t = inst.tasks[t].j
+                f.write(f'    {hash(t)} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="orange"];\n')
+
+        # Create edges for workers-tasks assignments
+        if display_tasks:
+            for t in tasks:
+                j_of_t = inst.tasks[t].j
+                for w in inst.tasks[t].workers:
+                    combination = (w.mid, w.oid)
+                    f.write(f'    {hash(t)} -- {hash(combination)} [color="orangered"];\n')
