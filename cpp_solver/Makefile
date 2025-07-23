@@ -49,17 +49,18 @@ simple: CXXFLAGS += -Os
 simple: scheduler
 
 
-SRC_DIR = .
-BIN_DIR = $(SRC_DIR)/objects
+BASE_DIR = .
+SRC_DIR = $(BASE_DIR)/src
+BIN_DIR = $(BASE_DIR)/objects
 
 SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve_gurobi.cpp $(SRC_DIR)/solve_greedy.cpp $(SRC_DIR)/solve_linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/breakdown.cpp $(SRC_DIR)/solve_traversal.cpp
-OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
+OBJECTS = $(SOURCES:$(BASE_DIR)/%.cpp=$(BIN_DIR)/%.o)
 
 
 scheduler: $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $(BIN_DIR)/scheduler.o $(CXXFLAGS) $(INCLUDES) $(LIBS) $(LDLIBS)
 
-$(BIN_DIR)/%.o: $(SRC_DIR)/%.cpp
+$(BIN_DIR)/%.o: $(BASE_DIR)/%.cpp
 	$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDES)
 
 
