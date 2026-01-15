@@ -2,13 +2,17 @@
 
 #define DEBUG 0
 
+#if DEBUG
+#include "ortools/linear_solver/linear_solver.h"
+#endif
+
 void resolve_traversal(
     Instance& inst,
     Solution& sol,
     std::map<int, std::deque<int>>& job_stacks,
     std::ostream& log_stream
 ) {
-    log_stream << "Beginning solving procedure with a tree traversal search heuristic..." << std::endl;
+    log_stream << "Beginning solving procedure with a priority dispatch + graph-pruning + greedy matching search heuristic...\n";
 
 
     std::set<int> available_machines{};
@@ -45,8 +49,8 @@ void resolve_traversal(
     int fail_safe{ 0 };
     while (!all_stacks_are_empty(job_stacks) && fail_safe < 100) {
         fail_safe++;
-        log_stream << std::endl << "================== *** Time " << time_pos << " *** ==================" << std::endl;
-        std::cout << "Beginning solving procedure at time " << time_pos << std::endl;
+        log_stream << "\n================== *** Time " << time_pos << " *** ==================\n";
+        std::cout << "Beginning solving procedure at time " << time_pos << '\n';
 
         // First release the resources that are no longer used
         release_idle_resources(
@@ -57,20 +61,20 @@ void resolve_traversal(
         );
 
         // Display the released resources
-        log_stream << "Released resources:" << std::endl;
+        log_stream << "Released resources:\n";
         log_stream << "M";
         print_set(release_calendar_machines[time_pos], 1, log_stream);
-        log_stream << std::endl << "O";
+        log_stream << "\nO";
         print_set(release_calendar_operators[time_pos], 1, log_stream);
-        log_stream << std::endl;
+        log_stream << '\n';
 
         // Display the available resources
-        log_stream << "Available resources:" << std::endl;
+        log_stream << "Available resources:\n";
         log_stream << "M";
         print_set(available_machines, 1, log_stream);
-        log_stream << std::endl << "O";
+        log_stream << "\nO";
         print_set(available_operators, 1, log_stream);
-        log_stream << std::endl;
+        log_stream << '\n';
 
         // ====== Organize the tasks to be processed per order of priority ======
         // We insert the tasks that are ready to be processed from the job stacks into in a new priority queue to be ranked and compared
@@ -89,7 +93,7 @@ void resolve_traversal(
 
 
         if (candidate_tasks.empty()) {
-            log_stream << "No candidate tasks to process at this time position. Continuing." << std::endl;
+            log_stream << "No candidate tasks to process at this time position. Continuing.\n";
             time_pos++;
             continue;
         }
@@ -101,11 +105,11 @@ void resolve_traversal(
         std::sort(candidate_tasks.begin(), candidate_tasks.end(), std::greater<std::tuple<int, int>>());
 
         // Display the candidate tasks
-        log_stream << std::endl << "There are " << nb_candidate_tasks << " candidate tasks for processing (priority score):" << std::endl << " { ";
+        log_stream << "\nThere are " << nb_candidate_tasks << " candidate tasks for processing (priority score):\n { ";
         for (auto& [score, t_idx] : candidate_tasks) {
             log_stream << "T" << t_idx + 1 << "(" << score << ") ";
         }
-        log_stream << "}" << std::endl << std::endl;
+        log_stream << "}\n\n";
 
 
 
@@ -135,18 +139,18 @@ void resolve_traversal(
         const int nb_workers = static_cast<int>(workers_pool.size());
 
         if (nb_workers == 0) {
-            log_stream << "No workers available for the candidate tasks. Continuing." << std::endl;
+            log_stream << "No workers available for the candidate tasks. Continuing.\n";
             time_pos++;
             continue;
         }
 
 #if DEBUG
         /* BUILDING A DECISION PROCESS USING LINEAR PROGRAMMING */
-        log_stream << "Selecting workers from the pool with a linear programming approach..." << std::endl;
+        log_stream << "Selecting workers from the pool with a linear programming approach...\n";
         // ====== Create the GLOP solver ======
         std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("GLOP"));
         if (!solver) {
-            log_stream << "Solver not created. Exiting..." << std::endl;
+            log_stream << "Solver not created. Exiting...\n";
             continue;
         }
 
@@ -211,18 +215,18 @@ void resolve_traversal(
         objective->SetMaximization();
 
 
-        log_stream << "Linear Program has " << solver->NumVariables() << " variables & " << solver->NumConstraints() << " constraints." << std::endl;
+        log_stream << "Linear Program has " << solver->NumVariables() << " variables & " << solver->NumConstraints() << " constraints.\n";
 
         const operations_research::MPSolver::ResultStatus result_status = solver->Solve();
 
         // Check that the problem has an optimal solution.
         if (result_status != operations_research::MPSolver::FEASIBLE && result_status != operations_research::MPSolver::OPTIMAL) {
-            log_stream << "The problem does not have a feasible or optimal solution!" << std::endl;
+            log_stream << "The problem does not have a feasible or optimal solution!\n";
             return;
         }
 
-        log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations" << std::endl;
-        log_stream << "Total objective: " << objective->Value() << std::endl;
+        log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations\n";
+        log_stream << "Total objective: " << objective->Value() << '\n';
 
         int nb_selected_workers = 0;
         for (int i = 0; i < nb_workers; i++) {
@@ -232,7 +236,7 @@ void resolve_traversal(
             }
         }
 
-        log_stream << std::endl << "Solving selected " << nb_selected_workers << "/" << nb_workers << " compatible workers (" << static_cast<float>(nb_selected_workers) / static_cast<float>(nb_workers) * 100.0f << "%):" << std::endl << " { ";
+        log_stream << "\nSolving selected " << nb_selected_workers << "/" << nb_workers << " compatible workers (" << static_cast<float>(nb_selected_workers) / static_cast<float>(nb_workers) * 100.0f << "%):\n { ";
 
         for (int i = 0; i < nb_workers; i++) {
             operations_research::MPVariable* w_var_ptr = workers_vars[i];
@@ -243,12 +247,15 @@ void resolve_traversal(
                 log_stream << "M" << w_m_idx + 1 << "_O" << w_o_idx + 1 << " ";
             }
         }
-        log_stream << "}" << std::endl;
+        log_stream << "}\n";
 #endif
 
 
         /* BUILDING A DECISION PROCESS USING LINEAR ALGEBRA */
-        log_stream << "Selecting workers from the pool with a weighted pruning approach..." << std::endl;
+        log_stream << "Selecting workers from the pool with a weighted pruning approach...\n";
+
+        // The iterative linear-algebra loop finds a good conflict-free subset of feasible worker pairs, and then a greedy pass uses those
+        // workers to schedule as many high-priority tasks as possible at the current time step.
 
         // Create a conflict matrix between all workers this round
         arma::SpMat<float> W_conflicts = arma::zeros<arma::SpMat<float>>(nb_workers, nb_workers);
@@ -292,7 +299,7 @@ void resolve_traversal(
         }
 
         // Display number of entries in the compatibility matrix
-        log_stream << "Compatibility matrix has " << arma::accu(T_W_compat) << " nonzero entries." << std::endl;
+        log_stream << "Compatibility matrix has " << arma::accu(T_W_compat) << " nonzero entries.\n";
 
 
         // Create a task scores vector
@@ -318,7 +325,7 @@ void resolve_traversal(
         opts.maxiter = 1000;
         opts.tol = 1e-5;
         int nb_eigenvalues = W_conflicts_laplacian.n_rows > 5 ? 5 : W_conflicts_laplacian.n_rows - 1;
-        log_stream << std::endl << "Computing " << nb_eigenvalues << " eigenvalues of the laplacian matrix...";
+        log_stream << "\nComputing " << nb_eigenvalues << " eigenvalues of the laplacian matrix...";
         arma::eigs_sym(eigval, eigvec, W_conflicts_laplacian, nb_eigenvalues, "sa");
 
         int multiplicity = 0;
@@ -327,8 +334,8 @@ void resolve_traversal(
         }
 
 
-        log_stream << " Done." << std::endl;
-        log_stream << "There are " << nb_workers << " workers available with given resources in >= " << multiplicity << " connected components." << std::endl;
+        log_stream << " Done.\n";
+        log_stream << "There are " << nb_workers << " workers available with given resources in >= " << multiplicity << " connected components.\n";
 
 
         // Defining some variables to store for the elimination heuristics loop
@@ -338,7 +345,7 @@ void resolve_traversal(
         arma::Col<float> W_compound_scores; // Compound scores of the workers
         arma::Col<arma::uword> W_compound_scores_indexes; // Sorted indexes of the compound scores
 
-        log_stream << "Resolving " << nb_conflicts << " conflicts among them..." << std::endl;
+        log_stream << "Resolving " << nb_conflicts << " conflicts among them...\n";
         int nb_elim_rounds = 0;
         while (nb_conflicts > 0) {
             // Compute the multiplicity of the tasks: i.e. the number of workers capable of addressing them
@@ -403,14 +410,14 @@ void resolve_traversal(
             nb_elim_rounds++;
         }
         log_stream << "\rConflicts remaining: " << nb_conflicts << std::flush;
-        log_stream << " Done. (" << nb_elim_rounds << " rounds)" << std::endl;
+        log_stream << " Done. (" << nb_elim_rounds << " rounds)\n";
 
         // We have now eliminated all conflicts, all remaining workers are compatible
         // We can now assign them to tasks
 
         int nb_active_workers = static_cast<int>(arma::sum(active_workers));
         // log_stream << "Pruning has eliminated " << nb_workers - nb_active_workers << " workers." << std::endl;
-        log_stream << std::endl << "Pruning selected " << nb_active_workers << "/" << nb_workers << " compatible workers (" << static_cast<float>(nb_active_workers) / static_cast<float>(nb_workers) * 100.0f << "%):" << std::endl << " { ";
+        log_stream << "\nPruning selected " << nb_active_workers << "/" << nb_workers << " compatible workers (" << static_cast<float>(nb_active_workers) / static_cast<float>(nb_workers) * 100.0f << "%):\n { ";
 
         for (int i = 0; i < nb_workers; i++) {
             if (active_workers(i) > 0.5f) {
@@ -419,7 +426,7 @@ void resolve_traversal(
                 log_stream << "M" << w_m_idx + 1 << "_O" << w_o_idx + 1 << " ";
             }
         }
-        log_stream << "}" << std::endl;
+        log_stream << "}\n";
 
 
 
@@ -454,7 +461,7 @@ void resolve_traversal(
 
 
         int nb_assigned_tasks = 0;
-        log_stream << std::endl << "Assigned tasks are:" << std::endl;
+        log_stream << "\nAssigned tasks are:\n";
         // Now we assign the tasks to the workers
         for (auto& [_, t_idx] : candidate_tasks) {
             // they are already ordered so the greatest score is first
@@ -474,7 +481,7 @@ void resolve_traversal(
 
             // If we have no more workers available, we stop
             if (w_idx_ptr >= nb_workers) {
-                log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") postponed." << std::endl;
+                log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") postponed.\n";
                 continue;
             }
             nb_assigned_tasks++;
@@ -507,11 +514,11 @@ void resolve_traversal(
 
             // Remove the task from the stack
             job_stacks[j_idx].pop_front();
-            log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << std::endl;
+            log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << '\n';
 
         }
-        log_stream << std::endl << "Assigned " << nb_assigned_tasks << " tasks of " << nb_candidate_tasks << " this round (" << static_cast<float>(nb_assigned_tasks) / static_cast<float>(nb_candidate_tasks) * 100.0f << "%)." << std::endl;
+        log_stream << "\nAssigned " << nb_assigned_tasks << " tasks of " << nb_candidate_tasks << " this round (" << static_cast<float>(nb_assigned_tasks) / static_cast<float>(nb_candidate_tasks) * 100.0f << "%).\n";
         time_pos++;
     }
-    log_stream << std::endl << "================== *** End of procedure *** ==================" << std::endl;
+    log_stream << "\n================== *** End of procedure *** ==================\n";
 }

@@ -52,7 +52,9 @@ int main(int argc, char* argv[]) {
     std::string method;
     CLI::Option* mth = app.add_option("-m,--method", method, "Method to use for solving the problem");
     mth->required();
-    mth->check(CLI::IsMember({ "solver", "greedy", "linprog", "traversal" }, CLI::ignore_case).description("Method must be one of: solver, greedy, linprog, traversal").active(false).name("method"));
+    std::vector<std::string> method_candidates = { "solver", "greedy", "traversal", "linprog" };
+
+    mth->check(CLI::IsMember(method_candidates, CLI::ignore_case).description("Method must be one of: solver, greedy, traversal, linprog").active(false).name("method"));
     mth->get_validator("method")->active();
 
     // Logging redirection
@@ -103,9 +105,11 @@ int main(int argc, char* argv[]) {
     std::map<std::string, int> method_map = {
         { "solver", 1 },
         { "greedy", 2 },
-        { "linprog", 3 },
         { "traversal", 4 }
     };
+#if defined(WITH_ORTOOLS)
+    method_map["linprog"] = 3;
+#endif
 
     // Look up the method code
     auto it = method_map.find(method);
@@ -113,7 +117,7 @@ int main(int argc, char* argv[]) {
         method_code = it->second;
     }
     else {
-        std::cerr << "Invalid method provided." << std::endl;
+        std::cerr << "Invalid method provided.\n";
         exit(1);
     }
 
@@ -128,7 +132,7 @@ int main(int argc, char* argv[]) {
         log_stream.open("./cpp_solver.log");
         log_ptr = &log_stream;
     } else {
-        std::cerr << "Invalid logging option provided." << std::endl;
+        std::cerr << "Invalid logging option provided.\n";
         exit(1);
     }
     std::ostream& log_solve = *log_ptr;
@@ -148,14 +152,14 @@ int main(int argc, char* argv[]) {
         total_time_per_job
     );
 
-    log_inform << std::endl << "======== Instance Details: ========" << std::endl;
-    log_inform << std::setw(5) << "J" << std::setw(8) << "W_J" << std::setw(8) << "\u03A3d_T" << std::setw(8) << "t_rel" << std::setw(8) << "t_due" << std::endl;
+    log_inform << "\n======== Instance Details: ========\n";
+    log_inform << std::setw(5) << "J" << std::setw(8) << "W_J" << std::setw(8) << "\u03A3d_T" << std::setw(8) << "t_rel" << std::setw(8) << "t_due" << '\n';
     for (int j_idx = 0; j_idx < inst.nb_jobs; j_idx++) {
         log_inform << std::setw(5) << j_idx + 1
             << std::setw(8) << inst.jobs[j_idx].weight
             << std::setw(8) << total_time_per_job[j_idx]
             << std::setw(8) << inst.jobs[j_idx].release_date
-            << std::setw(8) << inst.jobs[j_idx].due_date << std::endl;
+            << std::setw(8) << inst.jobs[j_idx].due_date << '\n';
     }
 
     print_job_stacks(job_stacks, log_inform);
@@ -187,6 +191,7 @@ int main(int argc, char* argv[]) {
         );
         stop = std::chrono::high_resolution_clock::now();
         break;
+        
     case 2:
         start = std::chrono::high_resolution_clock::now();
         resolve_greedy(
@@ -197,6 +202,7 @@ int main(int argc, char* argv[]) {
         );
         stop = std::chrono::high_resolution_clock::now();
         break;
+
     case 3:
         start = std::chrono::high_resolution_clock::now();
         resolve_linprog(
@@ -207,6 +213,7 @@ int main(int argc, char* argv[]) {
         );
         stop = std::chrono::high_resolution_clock::now();
         break;
+
     case 4:
         start = std::chrono::high_resolution_clock::now();
         resolve_traversal(
@@ -222,33 +229,40 @@ int main(int argc, char* argv[]) {
 
 
     // Now display all decisions in the solution
-    log_inform << std::endl << "======== Solution Details: ========" << std::endl;
-    log_inform << std::setw(5) << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << std::endl;
+    log_inform << "\n======== Solution Details: ========\n";
+    log_inform << std::setw(5) << "Task" << std::setw(8) << "Begin" << std::setw(10) << "Machine" << std::setw(10) << "Operator" << '\n';
     for (int t_idx = 0; t_idx < inst.nb_tasks; t_idx++) {
         log_inform << std::setw(5) << "T" << t_idx + 1
             << std::setw(8) << sol.begin_time_tasks[t_idx]
             << std::setw(10) << "M" << sol.machine_choice_tasks[t_idx] + 1
             << std::setw(10) << "O" << sol.operator_choice_tasks[t_idx] + 1
-            << std::endl;
+            << '\n';
     }
 
     int total_loss = compute_loss(inst, sol);
-    log_inform << "Total loss: " << total_loss << std::endl;
+    log_inform << "Total loss: " << total_loss << '\n';
 
-    std::chrono::duration<double> duration;
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    log_inform << "Solution computed solution under ";
-    if (duration.count() < 1000) {
-        log_inform << duration.count() << "\u33B2." << std::endl;
+    const auto elapsed = stop - start;
+    log_inform << "Solution computed in \u2264 ";
+    const auto prev_precision = log_inform.precision();
+    const auto prev_flags = log_inform.flags();
+    if (elapsed < std::chrono::milliseconds(1)) {
+        log_inform << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << " microseconds.\n";
+    }
+    else if (elapsed < std::chrono::seconds(1)) {
+        log_inform << std::fixed << std::setprecision(3)
+                   << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << " milliseconds.\n";
     }
     else {
-        duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
-        log_inform << duration.count() << "s." << std::endl;
+        log_inform << std::fixed << std::setprecision(3)
+                   << std::chrono::duration<double>(elapsed).count() << " seconds.\n";
     }
+    log_inform.flags(prev_flags);
+    log_inform.precision(prev_precision);
 
     // Check the validity of the solution
     if (check_validity(inst, sol)) {
-        log_inform << "The solution is valid." << std::endl;
+        log_inform << "The solution is valid.\n";
         sol.is_valid = true;
         // Write the solution to a file
         nlohmann::json json_solution;
@@ -258,7 +272,7 @@ int main(int argc, char* argv[]) {
 
     }
     else {
-        log_inform << "The solution is invalid." << std::endl;
+        log_inform << "The solution is invalid.\n";
     }
 
 
@@ -268,5 +282,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-

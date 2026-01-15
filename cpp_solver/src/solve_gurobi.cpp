@@ -28,12 +28,12 @@ void resolve_lookahead(
     int time_horizon{ 0 };
     int time_cursor{ 0 };
     int round = 1;
-    inform_stream << "Beginning solving procedure with solver-augmented iterative heuristic..." << std::endl;
-    inform_stream << "Lookahead duration set to " << lookahead << " time units." << std::endl;
-    inform_stream << "Solve time limit set to " << time_limit << " seconds." << std::endl;
-    inform_stream << "Gurobi threads set to " << max_threads << std::endl;
+    inform_stream << "Beginning solving procedure with solver-augmented iterative heuristic...\n";
+    inform_stream << "Lookahead duration set to " << lookahead << " time units.\n";
+    inform_stream << "Solve time limit set to " << time_limit << " seconds.\n";
+    inform_stream << "Gurobi threads set to " << max_threads << '\n';
 
-    log_stream << "Initializing Gurobi environment..." << std::endl;
+    log_stream << "Initializing Gurobi environment...\n";
     GRBEnv gurobi_env = GRBEnv(true);
     gurobi_env.set("LogFile", "gurobi.log");
     gurobi_env.start();
@@ -42,10 +42,10 @@ void resolve_lookahead(
         // While there are tasks to process in the lookahead window
         // We process the tasks of the jobs
         time_horizon = time_cursor + lookahead;
-        log_stream << std::endl << "**********************************************************" << std::endl;
-        inform_stream << std::endl << "**********************************************************" << std::endl;
-        log_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]..." << std::endl;
-        inform_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]..." << std::endl;
+        log_stream << "\n**********************************************************\n";
+        inform_stream << "\n**********************************************************\n";
+        log_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]...\n";
+        inform_stream << "Resolving lookahead on time window [" << time_cursor << ", " << time_horizon << "]...\n";
 
 
 
@@ -55,7 +55,7 @@ void resolve_lookahead(
             if (sol.begin_time_tasks[task_idx] + inst.tasks[task_idx].processing_time <= time_cursor) {
                 // The pending task has been processed in the lookahead window
                 it = pending_task_per_job.erase(it); // Erase and get the next iterator
-                log_stream << "Removed T" << task_idx + 1 << " (J" << parent_job + 1 << ") from pending." << std::endl;
+                log_stream << "Removed T" << task_idx + 1 << " (J" << parent_job + 1 << ") from pending.\n";
             }
             else {
                 ++it; // Advance the iterator if no erasure
@@ -82,7 +82,7 @@ void resolve_lookahead(
 
 
         if (processed_tasks.empty()) {
-            log_stream << "No tasks to process in the lookahead window. Moving to the next window." << std::endl;
+            log_stream << "No tasks to process in the lookahead window. Moving to the next window.\n";
             time_cursor += lookahead;
             continue;
         }
@@ -115,7 +115,7 @@ void resolve_lookahead(
         }
 
         // Warm up the solution with the greedy solution
-        log_stream << "Computing a greedy partial solution to warm up the model..." << std::endl;
+        log_stream << "Computing a greedy partial solution to warm up the model...\n";
         greedy_partial_solve_lookahead(
             inst,
             sol,
@@ -126,7 +126,7 @@ void resolve_lookahead(
             log_stream
         );
 
-        log_stream << std::endl << "Improving the greedy pre-solution with Gurobi..." << std::endl;
+        log_stream << "\n=== Improving the greedy pre-solution with Gurobi... ===\n";
         // Initialize Gurobi environment and model
         // inform_stream << "Creating model..." << std::endl;
         GRBModel model = GRBModel(gurobi_env);
@@ -147,7 +147,7 @@ void resolve_lookahead(
 
         // Declare the begin times of each task and set the ordering constraints
         std::map<int, std::map<int, GRBVar>> begin_times_tasks_per_job;
-        log_stream << "Declaring scheduling variables and constraints for processed job..." << std::endl;
+        log_stream << "Declaring scheduling variables and constraints for processed job...\n";
 
         set_begin_variables_and_ordering_constraints(
             inst,
@@ -164,7 +164,7 @@ void resolve_lookahead(
         std::map<int, GRBVar> tardiness_slacks;
         std::map<int, GRBVar> unit_penalties;
 
-        log_stream << "Adding slack and penalty variables for all jobs..." << std::endl;
+        log_stream << "Adding slack and penalty variables for all jobs...\n";
         set_slack_and_penalty_variables(
             model,
             tardiness_slacks,
@@ -173,7 +173,7 @@ void resolve_lookahead(
         );
 
         // Declare the assigned machines and operators variables for every task
-        log_stream << "Declaring assignment variables..." << std::endl;
+        log_stream << "Declaring assignment variables...\n";
         std::map<int, std::map<int, GRBVar>> assigned_operators_per_task;
         std::map<int, std::map<int, GRBVar>> assigned_machines_per_task;
         // first index is the task index, second index is the operator/machine index
@@ -188,7 +188,7 @@ void resolve_lookahead(
         );
 
         // Set the assignments time overlap constraints
-        log_stream << "Setting assignments time overlap constraints..." << std::endl;
+        log_stream << "Setting assignments time overlap constraints...\n";
         set_workers_time_exclusion_constraints(
             inst,
             sol,
@@ -204,7 +204,7 @@ void resolve_lookahead(
         // Define the resulting completion dates variable of each processed job
         // as the sum of its current completion date and the postponement due to task delays
         std::map<int, GRBLinExpr> new_completion_dates_jobs;
-        log_stream << "Adding completion date variables for all jobs..." << std::endl;
+        log_stream << "Adding completion date variables for all jobs...\n";
         set_completion_time_and_penalty_constraints(
             inst,
             model,
@@ -219,7 +219,7 @@ void resolve_lookahead(
 
 
         // Set the assignments physical overlap constraints
-        log_stream << "Setting workers physical overlap constraints..." << std::endl;
+        log_stream << "Setting workers physical overlap constraints...\n";
         set_workers_uniqueness_constraints(
             inst,
             model,
@@ -229,7 +229,7 @@ void resolve_lookahead(
         );
 
         // Set the OP-MA assignments compatibility constraints
-        log_stream << "Setting workers OP-MA compatibility constraints..." << std::endl;
+        log_stream << "Setting workers OP-MA compatibility constraints...\n";
         // These constraints are redundant but might help with constraint propagation, I guess
         set_workers_ubiquity_constraints(
             inst,
@@ -241,7 +241,7 @@ void resolve_lookahead(
 
 
         // Set and declare the objective function
-        log_stream << "Setting objective function..." << std::endl;
+        log_stream << "Setting objective function...\n";
         set_objective_function(
             inst,
             model,
@@ -250,7 +250,7 @@ void resolve_lookahead(
             tardiness_slacks,
             unit_penalties
         );
-        log_stream << std::endl;
+        log_stream << '\n';
 
         // Warm up the solution with the greedy search's results
         warmup_solution(
@@ -264,7 +264,7 @@ void resolve_lookahead(
 
 
         if (write_problem_file) {
-            log_stream << "Writing model to file..." << std::endl;
+            log_stream << "Writing model to file...\n";
             model.write("lp_problems/model" + std::to_string(round) + ".mps");
             model.write("lp_problems/model" + std::to_string(round) + ".lp");
         }
@@ -277,20 +277,20 @@ void resolve_lookahead(
         int num_GenConstrs = model.get(GRB_IntAttr_NumGenConstrs);
         int num_IntVars = model.get(GRB_IntAttr_NumIntVars);
         int num_BinVars = model.get(GRB_IntAttr_NumBinVars);
-        log_stream << "Model has " << num_Vars << " variables" << std::endl;
-        log_stream << "Model has " << num_IntVars << " integer variables" << std::endl;
-        log_stream << "Model has " << num_BinVars << " binary variables" << std::endl;
-        log_stream << "Model has " << num_Constrs << " linear constraints" << std::endl;
-        log_stream << "Model has " << num_SOS << " SOS constraints" << std::endl;
-        log_stream << "Model has " << num_QConstrs << " quadratic constraints" << std::endl;
-        log_stream << "Model has " << num_GenConstrs << " general constraints" << std::endl;
+        log_stream << "Model has " << num_Vars << " variables\n";
+        log_stream << "Model has " << num_IntVars << " integer variables\n";
+        log_stream << "Model has " << num_BinVars << " binary variables\n";
+        log_stream << "Model has " << num_Constrs << " linear constraints\n";
+        log_stream << "Model has " << num_SOS << " SOS constraints\n";
+        log_stream << "Model has " << num_QConstrs << " quadratic constraints\n";
+        log_stream << "Model has " << num_GenConstrs << " general constraints\n";
         int is_MIP = model.get(GRB_IntAttr_IsMIP);
         int is_QP = model.get(GRB_IntAttr_IsQP);
         int is_QCP = model.get(GRB_IntAttr_IsQCP);
 
-        log_stream << "Model is a MIP: " << is_MIP << std::endl;
-        log_stream << "Model is a QP: " << is_QP << std::endl;
-        log_stream << "Model is a QCP: " << is_QCP << std::endl << std::endl;
+        log_stream << "Model is a MIP: " << is_MIP << '\n';
+        log_stream << "Model is a QP: " << is_QP << '\n';
+        log_stream << "Model is a QCP: " << is_QCP << "\n\n";
 
 
         // log_stream << "Tuning model parameters..." << std::endl;
@@ -299,12 +299,12 @@ void resolve_lookahead(
         assert(model.get(GRB_IntAttr_SolCount) > 0);
         int status_code = model.get(GRB_IntAttr_Status);
         auto obj = model.get(GRB_DoubleAttr_ObjVal);
-        log_stream << "Model status code: " << status_code << std::endl;
-        log_stream << "Partial objective value on window: " << obj << std::endl;
+        log_stream << "Model status code: " << status_code << '\n';
+        log_stream << "Partial objective value on window: " << obj << '\n';
 
 
         if (report_all_decisions) {
-            std::cout << "Complete set of decision variables:" << std::endl;
+            std::cout << "Complete set of decision variables:\n";
             GRBVar* vars = NULL;
             double* values = NULL;
             std::string* names = NULL;
@@ -317,7 +317,7 @@ void resolve_lookahead(
             // Print the values of all variables
 
             for (int i = 0; i < numVars; i++) {
-                std::cout << names[i] << " = " << values[i] << std::endl;
+                std::cout << names[i] << " = " << values[i] << '\n';
             }
         }
 
@@ -327,7 +327,7 @@ void resolve_lookahead(
         // pending_task_per_job.clear();
 
         // Display the decisions and update pending tasks
-        log_stream << "~~~ Decisions made by the solver on this window: ~~~" << std::endl;
+        log_stream << "\n=== Decisions made by the solver on this window: ===\n";
         for (int i = processed_tasks.size() - 1; i >= 0; --i) {
             // Reverse order to catch the tasks that are postponed and push them back in the same order in the job stacks
             int task_idx = processed_tasks[i];
@@ -357,7 +357,7 @@ void resolve_lookahead(
                 job_stacks[parent_job].emplace_front(task_idx);
                 // We traversed the tasks in reverse order to ensure that the tasks are pushed back here in the same order as they were popped off
                 // Because of the precedence constraints, we know that all tasks that are pushed back here are adjacent and follow each other in the job sequence
-                log_stream << "* T" << task_idx + 1 << " postponed" << std::endl;
+                log_stream << "* T" << task_idx + 1 << " postponed\n";
             }
             else {
                 // Task begin time falls within the window and ends within or after the time horizon, we schedule it and fix it
@@ -372,7 +372,7 @@ void resolve_lookahead(
                     pending_task_per_job[parent_job] = task_idx; // there can be only one
                     log_stream << " (pending in subsequent window)";
                 }
-                log_stream << std::endl;
+                log_stream << '\n';
             }
         }
 
@@ -380,9 +380,9 @@ void resolve_lookahead(
         for (int job_idx : processed_jobs) {
             int tardiness = tardiness_slacks[job_idx].get(GRB_DoubleAttr_X);
             int unit_penalty = unit_penalties[job_idx].get(GRB_DoubleAttr_X);
-            log_stream << "Job J" << job_idx + 1 << " tardiness: " << tardiness << " / penalty: " << unit_penalty << std::endl;
+            log_stream << "Job J" << job_idx + 1 << " tardiness: " << tardiness << " / penalty: " << unit_penalty << '\n';
         }
-        log_stream << std::endl;
+        log_stream << '\n';
 
         processed_jobs.clear();
         processed_tasks.clear();
@@ -393,5 +393,4 @@ void resolve_lookahead(
         round++;
     }
 }
-
 

@@ -49,27 +49,27 @@ void import_instance(Instance& inst_object, std::filesystem::path filename, std:
         }
 
         // Commit log task details
-        out_stream << "=== Imported task T" << task_object.id << " ===" << std::endl;
-        out_stream << "* processing time: " << task_object.processing_time << std::endl;
-        out_stream << "* possible supports: " << std::endl;
+        out_stream << "=== Imported task T" << task_object.id << " ===\n";
+        out_stream << "* processing time: " << task_object.processing_time << '\n';
+        out_stream << "* possible supports: \n";
 
         for (auto& m : task_object.machines) {
             out_stream << "  - M" << m + 1 << " with O";
             print_set(task_object.compatibility[m], 1, out_stream);
-            out_stream << std::endl;
+            out_stream << '\n';
         }
         out_stream << "* Combined Machines: ";
         print_set(task_object.machines, 1, out_stream);
-        out_stream << std::endl;
+        out_stream << '\n';
         out_stream << "* Combined Operators: ";
         print_set(task_object.operators, 1, out_stream);
-        out_stream << std::endl << std::endl;
+        out_stream << "\n\n";
 
         // Commit task object to instance
         inst_object.tasks.push_back(task_object);
     }
 
-    out_stream << std::endl;
+    out_stream << '\n';
     // Iterate over jobs, import and print details
 
     for (auto& job_descriptor : inst_descriptor["jobs"]) {
@@ -90,13 +90,13 @@ void import_instance(Instance& inst_object, std::filesystem::path filename, std:
         }
 
         // Commit log job details
-        out_stream << "=== Imported job J" << job_object.id << " ===" << std::endl;
-        out_stream << "* release date: " << job_object.release_date << std::endl;
-        out_stream << "* due date: " << job_object.due_date << std::endl;
-        out_stream << "* weight: " << job_object.weight << std::endl;
+        out_stream << "=== Imported job J" << job_object.id << " ===\n";
+        out_stream << "* release date: " << job_object.release_date << '\n';
+        out_stream << "* due date: " << job_object.due_date << '\n';
+        out_stream << "* weight: " << job_object.weight << '\n';
         out_stream << "* task sequence: ";
         print_sequence(job_object.sequence, 1, out_stream);
-        out_stream << std::endl << std::endl;
+        out_stream << "\n\n";
 
         // Add job object to instance
         inst_object.jobs.push_back(job_object);
@@ -119,11 +119,11 @@ void export_solution(Solution& sol_object, std::filesystem::path filename) {
 
     std::ofstream out_file(filename);
     if (!out_file) {
-        std::cerr << "Error opening file for writing." << std::endl;
+        std::cerr << "Error opening file for writing.\n";
         return;
     }
 
-    out_file << std::setw(4) << sol_descriptor << std::endl;
+    out_file << std::setw(4) << sol_descriptor << '\n';
     out_file.close();
 
 }
@@ -159,7 +159,7 @@ void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream
     for (const auto& col : matrix.begin()->second) {
         out_stream << std::setw(4) << col.first + 1;
     }
-    out_stream << std::endl;
+    out_stream << '\n';
 
     // Print rows
     for (const auto& row : matrix) {
@@ -178,7 +178,7 @@ void display_cstr_matrix(std::map<int, std::map<int, int>>& matrix, std::ostream
                 out_stream << "    "; // Two spaces for proper alignment
             }
         }
-        out_stream << std::endl; // New line after each row
+        out_stream << '\n'; // New line after each row
     }
 }
 
@@ -202,7 +202,7 @@ void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream
     for (int col : columns) {
         out_stream << std::setw(4) << col;
     }
-    out_stream << std::endl;
+    out_stream << '\n';
 
     // Print each row
     for (const auto& [row_key, inner_map] : matrix) {
@@ -216,16 +216,15 @@ void displayMatrix(const std::map<int, std::map<int, int>>& matrix, std::ostream
                 out_stream << std::setw(4) << 0; // Default to 0 if no value exists
             }
         }
-        out_stream << std::endl;
+        out_stream << '\n';
     }
 }
 
 
 bool all_stacks_are_empty(const std::map<int, std::deque<int>>& stacks) {
-    std::all_of(stacks.begin(), stacks.end(), [](const auto& pair) {
+    return std::all_of(stacks.begin(), stacks.end(), [](const auto& pair) {
         return pair.second.empty();
-        });
-    return true;
+    });
 }
 
 
@@ -334,13 +333,13 @@ int compute_loss(const Instance& inst, const Solution& sol) {
 
 void print_job_stacks(const std::map<int, std::deque<int>>& job_stacks, std::ostream& log_stream) {
     // Print the job stacks
-    log_stream << std::endl << "Job stacks current state:" << std::endl;
+    log_stream << "\nJob stacks current state:\n";
     for (auto& [j_idx, task_stack] : job_stacks) {
         log_stream << "J" << j_idx + 1 << ": |";
         for (int t_idx : task_stack) {
             log_stream << "T" << t_idx + 1 << "|";
         }
-        log_stream << std::endl;
+        log_stream << '\n';
     }
 }
 
@@ -366,8 +365,8 @@ bool check_validity(const Instance& inst, const Solution& sol) {
             int t_idx = sequence[k];
             int lower_bound = k == 0 ? inst.jobs[j_idx].release_date : sol.begin_time_tasks[sequence[k - 1]] + inst.tasks[sequence[k - 1]].processing_time;
             if (lower_bound > sol.begin_time_tasks[t_idx]) {
-                std::cout << "Task " << t_idx + 1 << " of job " << j_idx + 1 << " is processed before the end of the previous task." << std::endl;
-                std::cout << "Previous task end time: " << lower_bound << ", task begin time: " << sol.begin_time_tasks[t_idx] << std::endl;
+                std::cout << "Task " << t_idx + 1 << " of job " << j_idx + 1 << " is processed before the end of the previous task.\n";
+                std::cout << "Previous task end time: " << lower_bound << ", task begin time: " << sol.begin_time_tasks[t_idx] << '\n';
                 return false;
             }
         }
@@ -389,11 +388,11 @@ bool check_validity(const Instance& inst, const Solution& sol) {
 
 
                 if (busy_machines.contains(m_idx)) {
-                    std::cout << "M" << m_idx + 1 << " is busy at time " << t << " from T" << task_of_machine[m_idx] + 1 << " but T" << t_idx + 1 << " uses it too." << std::endl;
+                    std::cout << "M" << m_idx + 1 << " is busy at time " << t << " from T" << task_of_machine[m_idx] + 1 << " but T" << t_idx + 1 << " uses it too.\n";
                     return false;
                 }
                 if (busy_operators.contains(o_idx)) {
-                    std::cout << "O" << o_idx + 1 << " is busy at time " << t << " from T" << task_of_operator[o_idx] + 1 << " but T" << t_idx + 1 << " uses it too." << std::endl;
+                    std::cout << "O" << o_idx + 1 << " is busy at time " << t << " from T" << task_of_operator[o_idx] + 1 << " but T" << t_idx + 1 << " uses it too.\n";
                     return false;
                 }
 
@@ -410,4 +409,3 @@ bool check_validity(const Instance& inst, const Solution& sol) {
     }
     return true;
 }
-

@@ -18,3 +18,7 @@ cpp_solver/build/*
 cpp_solver/objects/*
 cpp_solver/*.json
 build/*
+build_*/
+solutions/*
+profiling/*
+instances/*

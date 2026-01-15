@@ -8,7 +8,7 @@ void resolve_greedy(
     std::ostream& log_stream
 ) {
 
-    log_stream << "Beginning solving procedure with an elementary greedy iterative heuristic..." << std::endl;
+    log_stream << "Beginning solving procedure with an elementary greedy iterative heuristic...\n";
 
     int time_cursor{ 0 };
     // Print the job stacks
@@ -47,7 +47,7 @@ void resolve_greedy(
 
 
     while (!all_stacks_are_empty(job_stacks)) {
-        log_stream << std::endl << "================== *** Time " << time_pos << " *** ==================" << std::endl;
+        log_stream << "\n================== *** Time " << time_pos << " *** ==================\n";
 
 
         // First release the resources that are no longer used
@@ -59,20 +59,20 @@ void resolve_greedy(
         );
 
         // Display the released resources
-        log_stream << "Released resources:" << std::endl;
+        log_stream << "Released resources:\n";
         log_stream << "M";
         print_set(release_calendar_machines[time_pos], 1, log_stream);
-        log_stream << std::endl << "O";
+        log_stream << "\nO";
         print_set(release_calendar_operators[time_pos], 1, log_stream);
-        log_stream << std::endl;
+        log_stream << '\n';
 
         // Display the available resources
-        log_stream << "Available resources:" << std::endl;
+        log_stream << "Available resources:\n";
         log_stream << "M";
         print_set(available_machines, 1, log_stream);
-        log_stream << std::endl << "O";
+        log_stream << "\nO";
         print_set(available_operators, 1, log_stream);
-        log_stream << std::endl;
+        log_stream << '\n';
 
 
         std::priority_queue<std::tuple<int, int>> task_queue{};
@@ -172,9 +172,9 @@ void resolve_greedy(
 
             // Remove the task from the stack
             job_stacks[j_idx].pop_front();
-            log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << " at time " << time_pos << std::endl;
+            log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << " at time " << time_pos << '\n';
         }
         time_pos++;
     }
-    log_stream << std::endl << "End of solving procedure." << std::endl << std::endl;
+    log_stream << "\nEnd of solving procedure.\n\n";
 }

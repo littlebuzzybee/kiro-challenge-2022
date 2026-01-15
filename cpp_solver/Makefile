@@ -1,36 +1,36 @@
 CXX = g++
-CXXFLAGS := -std=c++20 -Wall -Wextra -march=native
+CXXFLAGS := -std=c++23 -Wall -Wextra -march=native
 
 OPTIONAL_FLAGS := -Werror -fanalyzer -pedantic
 INDIVIDUAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs 
 
-GUROBI_INCLUDE = /opt/gurobi1200/linux64/include
-GUROBI_LIB = /opt/gurobi1200/linux64/lib
 
-ORTOOLS_INCLUDE = /opt/or-tools_v9.11.4210/include
-ORTOOLS_LIB = /opt/or-tools_v9.11.4210/lib
+GUROBI_HOME ?= $(GUROBI_HOME)
+GUROBI_INCLUDE = $(GUROBI_HOME)/include
+GUROBI_LIB = $(GUROBI_HOME)/lib
 
-HIGHS_INCLUDE = /opt/highs-1.10.0/include/highs
-HIGHS_LIB = /opt/highs-1.10.0/lib
-
-# KALIS_INCLUDE
-# KALIS_LIB
+ORTOOLS_HOME ?= /home/matthias/or-tools_x86_64_ubuntu-24.04_cpp_v9.10.4067
+ORTOOLS_INCLUDE = $(ORTOOLS_HOME)/include
+ORTOOLS_LIB = $(ORTOOLS_HOME)/lib
 
 JSON_INCLUDE = ./nlohmann
 
-INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE) -I$(ORTOOLS_INCLUDE) # -I$(HIGHS_INCLUDE)
-LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE) -L$(ORTOOLS_LIB) # -L$(HIGHS_LIB)
+INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE)
+LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE)
 
 
 # Library 
-LDLIBS = -lgurobi_c++ -lgurobi120 -lortools -llapack -lblas -larmadillo # -lhighs
+LDLIBS = -lgurobi_c++ -lgurobi130 -llapack -lblas -larmadillo
 
 # Library dependencies
-LDLIBS += -lpthread -lm -ldl -lrt -lstdc++fs -ltbb
+LDLIBS += -lpthread -lm -ldl -lrt -ltbb
 
 
+INCLUDES += -I$(ORTOOLS_INCLUDE)
+LIBS += -L$(ORTOOLS_LIB)
+LDLIBS += -lortools
 
-
+ 
 # a rule for building the program with full debug information
 debug: CXXFLAGS += -g3 -Og #  -g0..3 (g default)
 debug: scheduler
@@ -38,7 +38,6 @@ debug: scheduler
 # a rule for building the program fully optimized and release it
 release: CXXFLAGS += -O3 -DNDEBUG -DPARALLEL -fopenmp -fopt-info-vec=vec.opt
 release: scheduler
-# -mavx2 -msse4.1 -mavx -msse -msse3 -mssse3 -msse2
 
 # a rule for profiling the program, pg is for gprof
 profile: CXXFLAGS += -pg -O2
@@ -54,22 +53,22 @@ SRC_DIR = $(BASE_DIR)/src
 BIN_DIR = $(BASE_DIR)/objects
 
 SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve_gurobi.cpp $(SRC_DIR)/solve_greedy.cpp $(SRC_DIR)/solve_linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/breakdown.cpp $(SRC_DIR)/solve_traversal.cpp
-OBJECTS = $(SOURCES:$(BASE_DIR)/%.cpp=$(BIN_DIR)/%.o)
+OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
 
 
 scheduler: $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $(BIN_DIR)/scheduler.o $(CXXFLAGS) $(INCLUDES) $(LIBS) $(LDLIBS)
 
-$(BIN_DIR)/%.o: $(BASE_DIR)/%.cpp
+$(BIN_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDES)
 
 
 
 INSTANCES_DIR = ../instances
 SOLUTIONS_DIR = ../solutions
-PROFILING_DIR = ..:profiling
+PROFILING_DIR = ../profiling
 
-ARGS = --input_file=$(INSTANCES_DIR)/medium.json --method=traversal --output_file=$(SOLUTIONS_DIR)/tiny_sol.json -w
+ARGS = --input_file=$(INSTANCES_DIR)/tiny.json --method=solver --lookahead 5 --gurobi_threads 12 --output_file=$(SOLUTIONS_DIR)/tiny.json
 
 clean:
 	rm -f $(BIN_DIR)/*.o

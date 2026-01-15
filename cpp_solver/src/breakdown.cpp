@@ -93,13 +93,13 @@ void display_lookahead_program(
     std::unordered_map<int, int>& pending_task_per_job,
     std::ostream& log_stream
 ) {
-    log_stream << "There are " << processed_jobs.size() << " jobs and " << processed_tasks.size() << " tasks being processed this round." << std::endl;
+    log_stream << "There are " << processed_jobs.size() << " jobs and " << processed_tasks.size() << " tasks being processed this round.\n";
 
-    log_stream << "They comprise the following processed tasks in the lookahead window: ";
+    log_stream << "They comprise the following processed tasks in the lookahead window:\n";
     for (int task_idx : processed_tasks) {
         log_stream << task_idx + 1 << "; ";
     }
-    log_stream << " distributed as follows: " << std::endl << std::endl;
+    log_stream << "\n\ndistributed as follows:\n\n";
 
     for (int job_idx : processed_jobs) {
         log_stream << "J" << job_idx + 1 << " entails " << processed_tasks_of_jobs[job_idx].size() << " tasks ordered as:" << std::setw(2);
@@ -107,14 +107,14 @@ void display_lookahead_program(
             log_stream << "|" << task_idx + 1;
         }
         log_stream << "|";
-        log_stream << "   (+ " << job_stacks[job_idx].size() << " remaining)" << std::endl;
+        log_stream << "   (+ " << job_stacks[job_idx].size() << " remaining)\n";
     }
-    log_stream << std::endl << "There are " << pending_task_per_job.size() << " pending tasks in total: ";
+    log_stream << "\nThere are " << pending_task_per_job.size() << " pending tasks in total: ";
     for (auto& [j_idx, t_idx] : pending_task_per_job) {
         log_stream << "T" << t_idx + 1 << " (J" << j_idx + 1 << ");  ";
     }
-    log_stream << std::endl;
-    log_stream << "Max duration of processed tasks: " << max_duration_tasks << std::endl << std::endl;
+    log_stream << '\n';
+    log_stream << "Max duration of processed tasks: " << max_duration_tasks << "\n\n";
 }
 
 
@@ -655,7 +655,7 @@ void greedy_partial_solve_lookahead(
 
     int time_pos{ time_cursor };
 
-    log_stream << "~~~ Decisions made by the heuristic on this window: ~~~" << std::endl;
+    log_stream << "\n=== Decisions made by the heuristic on this window: ===\n";
     while (!all_stacks_are_empty(job_stacks)) { // && time_pos < time_horizon
         // TODO: take into account the tardiness of each job in a priority queue
         // First release the resources that are no longer used
@@ -745,7 +745,7 @@ void greedy_partial_solve_lookahead(
             else if (time_pos + inst.tasks[t_idx].processing_time > time_horizon) {
                 log_stream << " (pending in subsequent window)";
             }
-            log_stream << std::endl;
+            log_stream << '\n';
 
         }
         time_pos++;

@@ -7,7 +7,7 @@ void resolve_linprog(
     std::map<int, std::deque<int>>& job_stacks,
     std::ostream& log_stream
 ) {
-    log_stream << "Beginning solving procedure with a local LP timestep search heuristic..." << std::endl;
+    log_stream << "Beginning solving procedure with a local LP timestep search heuristic...\n";
 
 
     std::set<int> available_machines{};
@@ -44,7 +44,7 @@ void resolve_linprog(
     int fail_safe{ 0 };
     while (!all_stacks_are_empty(job_stacks) && fail_safe < 100) {
         fail_safe++;
-        log_stream << std::endl << "================== *** Time " << time_pos << " *** ==================" << std::endl;
+        log_stream << "\n================== *** Time " << time_pos << " *** ==================\n";
 
 
         // First release the resources that are no longer used
@@ -56,20 +56,20 @@ void resolve_linprog(
         );
 
         // Display the released resources
-        log_stream << "Released resources:" << std::endl;
+        log_stream << "Released resources:\n";
         log_stream << "M";
         print_set(release_calendar_machines[time_pos], 1, log_stream);
-        log_stream << std::endl << "O";
+        log_stream << "\nO";
         print_set(release_calendar_operators[time_pos], 1, log_stream);
-        log_stream << std::endl;
+        log_stream << '\n';
 
         // Display the available resources
-        log_stream << "Available resources:" << std::endl;
+        log_stream << "Available resources:\n";
         log_stream << "M";
         print_set(available_machines, 1, log_stream);
-        log_stream << std::endl << "O";
+        log_stream << "\nO";
         print_set(available_operators, 1, log_stream);
-        log_stream << std::endl;
+        log_stream << '\n';
 
         // ====== Organize the tasks to be processed per order of priority ======
         // We insert the tasks that are ready to be processed from the job stacks into in a new priority queue to be ranked and compared
@@ -89,7 +89,7 @@ void resolve_linprog(
 
         
         if (candidate_tasks.empty()) {
-            log_stream << "No candidate tasks to process at this time position. Continuing." << std::endl;
+            log_stream << "No candidate tasks to process at this time position. Continuing.\n";
             time_pos++;
             continue;
         }
@@ -101,12 +101,12 @@ void resolve_linprog(
         for (auto& [score, t_idx] : candidate_tasks) {
             log_stream << "T" << t_idx + 1 << "(" << score << ") ";
         }
-        log_stream << " }" << std::endl;
+        log_stream << " }\n";
 
         // ====== Create the GLOP solver ======
         std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("GLOP"));
         if (!solver) {
-            log_stream << "Solver not created. Exiting..." << std::endl;
+            log_stream << "Solver not created. Exiting...\n";
             return;
         }
 
@@ -177,16 +177,16 @@ void resolve_linprog(
         }
         objective->SetMaximization();
 
-        log_stream << "Number of constraints = " << solver->NumConstraints() << std::endl;
-        log_stream << "Number of variables = " << solver->NumVariables() << std::endl;
+        log_stream << "Number of constraints = " << solver->NumConstraints() << '\n';
+        log_stream << "Number of variables = " << solver->NumVariables() << '\n';
         const operations_research::MPSolver::ResultStatus result_status = solver->Solve();
 
         // Check that the problem has an optimal solution.
         if (result_status != operations_research::MPSolver::FEASIBLE && result_status != operations_research::MPSolver::OPTIMAL) {
-            log_stream << "The problem does not have a feasible or optimal solution!" << std::endl;
+            log_stream << "The problem does not have a feasible or optimal solution!\n";
         }
 
-        log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations" << std::endl;
+        log_stream << "Problem solved in " << solver->wall_time() << " milliseconds & " << solver->iterations() << " iterations\n";
 
 
         std::map <int, std::tuple<int, int>> tasks_chosen_resources{};
@@ -200,8 +200,8 @@ void resolve_linprog(
         }
 
         
-        log_stream << "Overhead tardiness score: " << objective->Value() << std::endl;
-        log_stream << std::endl << "Assigned tasks are:" << std::endl;
+        log_stream << "Overhead tardiness score: " << objective->Value() << '\n';
+        log_stream << "\nAssigned tasks are:\n";
 
 
         for (auto & [t_idx, resources] : tasks_chosen_resources) {
@@ -230,10 +230,10 @@ void resolve_linprog(
 
             // Remove the task from the stack
             job_stacks[j_idx].pop_front();
-            log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << std::endl;
+            log_stream << " - Task T" << t_idx + 1 << " (J" << j_idx + 1 << ") assigned to M" << chosen_machine + 1 << " & O" << chosen_operator + 1 << '\n';
         }
-        log_stream << std::endl << "Assigned " << tasks_chosen_resources.size() << " tasks of " << candidate_tasks.size() << " this round (" << static_cast<float>(tasks_chosen_resources.size()) / static_cast<float>(candidate_tasks.size()) * 100.0f << "%)." << std::endl;
+        log_stream << "\nAssigned " << tasks_chosen_resources.size() << " tasks of " << candidate_tasks.size() << " this round (" << static_cast<float>(tasks_chosen_resources.size()) / static_cast<float>(candidate_tasks.size()) * 100.0f << "%).\n";
         time_pos++;
     }
-    log_stream << std::endl << "================== *** End of procedure *** ==================" << std::endl;
+    log_stream << "\n================== *** End of procedure *** ==================\n";
 }
