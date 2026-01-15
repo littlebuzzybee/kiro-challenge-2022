@@ -4,6 +4,16 @@ CXXFLAGS := -std=c++23 -Wall -Wextra -march=native
 OPTIONAL_FLAGS := -Werror -fanalyzer -pedantic
 INDIVIDUAL_FLAGS := -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-private-field -Wno-unused-value -Wno-unused-local-typedefs 
 
+JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+
+ifneq (,$(filter release,$(MAKECMDGOALS)))
+  ifeq (,$(filter -j%,$(MAKEFLAGS)))
+    MAKEFLAGS += -j$(JOBS)
+  endif
+endif
+
+.PHONY: debug release profile simple clean test analyse gprof
+
 
 GUROBI_HOME ?= $(GUROBI_HOME)
 GUROBI_INCLUDE = $(GUROBI_HOME)/include
