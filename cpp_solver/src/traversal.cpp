@@ -1,4 +1,4 @@
-#include "solve_traversal.h"
+#include "traversal.h"
 
 #define DEBUG 0
 

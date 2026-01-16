@@ -1,5 +1,5 @@
-#ifndef BREAKDOWN_H
-#define BREAKDOWN_H
+#ifndef LOOKAHEAD_BREAKDOWN_H
+#define LOOKAHEAD_BREAKDOWN_H
 
 
 #include <iostream>

@@ -62,7 +62,7 @@ BASE_DIR = .
 SRC_DIR = $(BASE_DIR)/src
 BIN_DIR = $(BASE_DIR)/objects
 
-SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/solve_gurobi.cpp $(SRC_DIR)/solve_greedy.cpp $(SRC_DIR)/solve_linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/breakdown.cpp $(SRC_DIR)/solve_traversal.cpp
+SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/lookahead_gurobi.cpp $(SRC_DIR)/greedy.cpp $(SRC_DIR)/linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/lookahead_breakdown.cpp $(SRC_DIR)/traversal.cpp
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
 
 

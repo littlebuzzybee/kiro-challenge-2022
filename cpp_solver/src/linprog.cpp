@@ -1,4 +1,4 @@
-#include "solve_linprog.h"
+#include "linprog.h"
 
 
 void resolve_linprog(

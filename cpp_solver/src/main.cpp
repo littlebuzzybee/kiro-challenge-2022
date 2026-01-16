@@ -13,10 +13,10 @@
 
 #include "gurobi_c++.h"
 #include "utils.h"
-#include "solve_gurobi.h"
-#include "solve_greedy.h"
-#include "solve_linprog.h"
-#include "solve_traversal.h"
+#include "lookahead_gurobi.h"
+#include "greedy.h"
+#include "linprog.h"
+#include "traversal.h"
 #include "nlohmann/json.hpp"
 #include "CLI/CLI.hpp"
 

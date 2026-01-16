@@ -1,4 +1,4 @@
-#include "solve_greedy.h"
+#include "greedy.h"
 
 
 void resolve_greedy(

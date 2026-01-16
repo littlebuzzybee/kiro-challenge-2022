@@ -1,5 +1,5 @@
-#ifndef SOLVE_TRAVERSAL_H
-#define SOLVE_TRAVERSAL_H
+#ifndef TRAVERSAL_H
+#define TRAVERSAL_H
 
 #include <iostream>
 #include <string>

@@ -1,5 +1,5 @@
-#ifndef SOLVE_LINPROG_H
-#define SOLVE_LINPROG_H
+#ifndef LINPROG_H
+#define LINPROG_H
 
 #include <iostream>
 #include <string>
