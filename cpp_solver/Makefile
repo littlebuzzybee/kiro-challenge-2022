@@ -62,7 +62,7 @@ BASE_DIR = .
 SRC_DIR = $(BASE_DIR)/src
 BIN_DIR = $(BASE_DIR)/objects
 
-SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/lookahead_gurobi.cpp $(SRC_DIR)/greedy.cpp $(SRC_DIR)/linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/lookahead_breakdown.cpp $(SRC_DIR)/traversal.cpp
+SOURCES = $(SRC_DIR)/utils.cpp $(SRC_DIR)/lookahead_gurobi.cpp $(SRC_DIR)/greedy.cpp $(SRC_DIR)/linprog.cpp $(SRC_DIR)/main.cpp $(SRC_DIR)/lookahead_breakdown.cpp $(SRC_DIR)/traversal.cpp $(SRC_DIR)/traversal_breakdown.cpp
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
 
 
@@ -78,7 +78,7 @@ INSTANCES_DIR = ../instances
 SOLUTIONS_DIR = ../solutions
 PROFILING_DIR = ../profiling
 
-ARGS = --input_file=$(INSTANCES_DIR)/tiny.json --method=solver --lookahead 5 --gurobi_threads 12 --output_file=$(SOLUTIONS_DIR)/tiny.json
+ARGS = --input_file=$(INSTANCES_DIR)/large.json --method=traversal --lookahead 5 --gurobi_threads 12 --output_file=$(SOLUTIONS_DIR)/large.json
 
 clean:
 	rm -f $(BIN_DIR)/*.o
