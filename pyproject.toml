@@ -9,8 +9,15 @@ dependencies = [
     "ipykernel>=7.3.0",
     "ipython>=9.16.1",
     "matplotlib>=3.11.1",
+    "mypy>=2.3.0",
     "networkx>=3.6.1",
     "numpy>=2.5.2",
     "pillow>=12.3.0",
     "pulp>=3.3.2",
+    "ruff>=0.16.2",
 ]
+
+[tool.mypy]
+# Several third-party dependencies do not ship type stubs or a py.typed marker.
+# Keep checking this project while treating those external imports as untyped.
+ignore_missing_imports = true

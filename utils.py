@@ -1,13 +1,26 @@
+from __future__ import annotations
+
 import json
+from itertools import combinations
+from typing import Any
 
 import gurobipy as gp
 import numpy as np
 from gurobipy import GRB
-from pulp import *
+from pulp import LpBinary, LpInteger, LpMinimize, LpProblem, LpStatus, LpVariable, lpSum
 
 
 class Job:
-    def __init__(self, inst, jid, Sj, rj, dj, wj, Tj):
+    def __init__(
+        self,
+        inst: Instance,
+        jid: Any,
+        Sj: list[Any],
+        rj: Any,
+        dj: Any,
+        wj: Any,
+        Tj: list[Any],
+    ) -> None:
         self.inst = inst  # instance
 
         self.id = jid  # job id
@@ -17,13 +30,13 @@ class Job:
         self.w = wj  # weight
         self.T = Tj  # list of tasks for this job
 
-    def B(self):
+    def B(self) -> Any:
         return self.inst.tasks[self.S[0]].B  # beginning date
 
-    def C(self):
+    def C(self) -> Any:
         return self.inst.tasks[self.S[-1]].C  # completion date
 
-    def cost(self):
+    def cost(self) -> Any:
         C = self.C()
         T = max(C - self.d, 0)
         U = 1 if T > 0 else 0
@@ -31,7 +44,9 @@ class Job:
 
 
 class Task:
-    def __init__(self, inst, tid, p, workers, job):
+    def __init__(
+        self, inst: Instance, tid: Any, p: Any, workers: list[Worker], job: Any
+    ) -> None:
         self.inst = inst  # instance
 
         self.id = tid  # Task id
@@ -39,8 +54,8 @@ class Task:
         self.workers = workers  # possible Workers for this Task (list)
         self.j = job  # job this Task belongs to
 
-        self.B = None  # beginning date
-        self.C = None  # completion date
+        self.B: Any = None  # beginning date
+        self.C: Any = None  # completion date
         self.mid = None  # assigned machine id
         self.oid = None  # assigned operator id
         self.running = False  # is running
@@ -48,7 +63,7 @@ class Task:
 
 
 class Worker:
-    def __init__(self, inst, mid, oid):
+    def __init__(self, inst: Instance, mid: Any, oid: Any) -> None:
         self.inst = inst  # instance
 
         self.mid = mid  # machine id
@@ -56,23 +71,23 @@ class Worker:
 
 
 class Instance:
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
 
-        self.J = None
-        self.I = None
-        self.M = None
-        self.O = None
-        self.alpha = None
-        self.beta = None
+        self.J: Any = None
+        self.I: Any = None
+        self.M: Any = None
+        self.O: Any = None
+        self.alpha: Any = None
+        self.beta: Any = None
 
-        self.jobs = {}
-        self.tasks = {}
-        self.machines = {}  # machines availabilities
-        self.operators = {}  # operators availabilities
-        self.task2job = {}  # task to job mapping
+        self.jobs: dict[Any, Job] = {}
+        self.tasks: dict[Any, Task] = {}
+        self.machines: dict[Any, bool] = {}  # machines availabilities
+        self.operators: dict[Any, bool] = {}  # operators availabilities
+        self.task2job: dict[Any, Any] = {}  # task to job mapping
 
-    def load(self, filename):
+    def load(self, filename: str) -> None:
         with open(filename, "rb") as f:
             inst = json.load(f)
 
@@ -97,7 +112,7 @@ class Instance:
                 self.machines[worker.mid] = True
                 self.operators[worker.oid] = True
 
-    def parser_job(self, job):
+    def parser_job(self, job: dict[str, Any]) -> Job:
         jid = job["job"]
         Sj = job["sequence"]
         rj = job["release_date"]
@@ -109,7 +124,7 @@ class Instance:
             tj.append(tid)
         return Job(self, jid, Sj, rj, dj, wj, tj)
 
-    def parser_task(self, task):
+    def parser_task(self, task: dict[str, Any]) -> Task:
         tid = task["task"]
         p = task["processing_time"]
         j = self.task2job[tid]
@@ -121,18 +136,17 @@ class Instance:
                 workers.append(Worker(self, mid, oid))
         return Task(self, tid, p, workers, j)
 
-    def greedy_solve(self):
+    def greedy_solve(self) -> None:
         time = 0
 
         while np.sum([t.done for t in self.tasks.values()]) < self.I:
             for t in self.tasks.values():
-                if t.running:
-                    if time - t.B >= t.p:
-                        t.running = False  # task ends
-                        t.done = True  # task is done
-                        self.machines[t.mid] = True  # free machine
-                        self.operators[t.oid] = True  # free operator
-                        t.C = time  # set completion time
+                if t.running and time - t.B >= t.p:
+                    t.running = False  # task ends
+                    t.done = True  # task is done
+                    self.machines[t.mid] = True  # free machine
+                    self.operators[t.oid] = True  # free operator
+                    t.C = time  # set completion time
 
             for j in self.jobs.values():
                 if time >= j.r:  # it is past the release date of this job
@@ -159,7 +173,7 @@ class Instance:
 
             time += 1  # time flows
 
-    def cost(self):
+    def cost(self) -> Any:
         s = 0
         for job in self.jobs.values():
             C = job.C()
@@ -170,24 +184,24 @@ class Instance:
 
 
 class PuLP_Problem:
-    def __init__(self, inst):
+    def __init__(self, inst: Instance) -> None:
         """Instantiates a PuLP problem.
 
         Args:
             inst (Instance): the instance to solve
         """
         self.inst = inst
-        self.prob = None
-        self.solver = None
+        self.prob: Any = None
+        self.solver: Any = None
 
-        self.B_vars = {}  # task beginnings vars
-        self.C_vars = {}  # task completions vars
-        self.T_vars = {}  # tardiness vars
-        self.U_vars = {}  # unit penalty vars
-        self.mach_assign = {}  # machine assignment vars
-        self.op_assign = {}  # operator assignment vars
+        self.B_vars: dict[Any, Any] = {}  # task beginnings vars
+        self.C_vars: dict[Any, Any] = {}  # task completions vars
+        self.T_vars: dict[Any, Any] = {}  # tardiness vars
+        self.U_vars: dict[Any, Any] = {}  # unit penalty vars
+        self.mach_assign: dict[Any, Any] = {}  # machine assignment vars
+        self.op_assign: dict[Any, Any] = {}  # operator assignment vars
 
-    def generate_problem(self):
+    def generate_problem(self) -> None:
         """Generates the PuLP problem."""
 
         print(f"Generating PuLP problem for {self.inst.name}...")
@@ -197,12 +211,12 @@ class PuLP_Problem:
         # big M
         M = 2 * max([job.d for job in self.inst.jobs.values()])
 
-        B_vars = {}
-        C_vars = {}
-        T_vars = {}
-        U_vars = {}
+        B_vars: dict[Any, Any] = {}
+        C_vars: dict[Any, Any] = {}
+        T_vars: dict[Any, Any] = {}
+        U_vars: dict[Any, Any] = {}
 
-        print(f"Adding jobs/tasks variables and constraints...")
+        print("Adding jobs/tasks variables and constraints...")
 
         for job in self.inst.jobs.values():
             for tid in job.S:
@@ -234,15 +248,13 @@ class PuLP_Problem:
             # M has to be greater than all tardinesses
             self.prob += M * Uj >= Tj
 
-        print(f"Adding machines and operators variables and constraints...")
+        print("Adding machines and operators variables and constraints...")
 
-        mach_assign = {}
+        mach_assign: dict[Any, Any] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                mids = set(
-                    [worker.mid for worker in task.workers]
-                )  # unique machine ids that can process this task
+                mids = {worker.mid for worker in task.workers}
                 for mid in mids:
                     mach_assign[tid, mid] = LpVariable(
                         f"task{tid}_machine{mid}", cat=LpBinary
@@ -250,13 +262,11 @@ class PuLP_Problem:
                 # each task is assigned to exactly one machine
                 self.prob += lpSum([mach_assign[tid, mid] for mid in mids]) == 1
 
-        op_assign = {}
+        op_assign: dict[Any, Any] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                oids = set(
-                    [worker.oid for worker in task.workers]
-                )  # unique operator ids that can process this task
+                oids = {worker.oid for worker in task.workers}
                 for oid in oids:
                     op_assign[tid, oid] = LpVariable(
                         f"task{tid}_operator{oid}", cat=LpBinary
@@ -264,9 +274,9 @@ class PuLP_Problem:
                 # each task is assigned to exactly one operator
                 self.prob += lpSum([op_assign[tid, oid] for oid in oids]) == 1
 
-        for mid in set([k[1] for k in mach_assign.keys()]):  # iterate over machines
-            for tid1, tid2 in combination(
-                set([k[0] for k in mach_assign.keys() if k[1] == mid]), 2
+        for mid in {k[1] for k in mach_assign}:  # iterate over machines
+            for tid1, tid2 in combinations(
+                {k[0] for k in mach_assign if k[1] == mid}, 2
             ):
                 indic1 = LpVariable(f"machine{mid}_C{tid1}>B{tid2}", cat=LpBinary)
                 indic2 = LpVariable(f"machine{mid}_C{tid2}>B{tid1}", cat=LpBinary)
@@ -283,10 +293,8 @@ class PuLP_Problem:
                     <= 3
                 )
 
-        for oid in set([k[1] for k in op_assign.keys()]):  # iterate over operators
-            for tid1, tid2 in combination(
-                set([k[0] for k in op_assign.keys() if k[1] == oid]), 2
-            ):
+        for oid in {k[1] for k in op_assign}:  # iterate over operators
+            for tid1, tid2 in combinations({k[0] for k in op_assign if k[1] == oid}, 2):
                 indic1 = LpVariable(f"operator{oid}_C{tid1}>B{tid2}", cat=LpBinary)
                 indic2 = LpVariable(f"operator{oid}_C{tid2}>B{tid1}", cat=LpBinary)
                 # M has to be greater than complete running time of all jobs/tasks
@@ -301,7 +309,7 @@ class PuLP_Problem:
                     indic1 + indic2 + op_assign[tid1, oid] + op_assign[tid2, oid] <= 3
                 )
 
-        print(f"Adding objective function...")
+        print("Adding objective function...")
 
         w = [job.w for job in self.inst.jobs.values()]  # job weights
         JC_vars = [
@@ -323,14 +331,14 @@ class PuLP_Problem:
         )
         self.mach_assign, self.op_assign = mach_assign, op_assign
 
-        print(f"PuLP problem generated.")
+        print("PuLP problem generated.")
 
-    def show_info(self):
+    def show_info(self) -> None:
         print(
             f"Problem {self.prob.name} has {self.prob.numVariables()} variables and {self.prob.numConstraints()} constraints"
         )
 
-    def warmup(self):
+    def warmup(self) -> None:
         """Sets intial values for variables to solve with warm start."""
 
         # set greedy beginning times
@@ -352,64 +360,64 @@ class PuLP_Problem:
             else:
                 v.setInitialValue(0, check=True)
 
-    def set_solver(self, solver):
+    def set_solver(self, solver: Any) -> None:
         """Sets solver for the problem."""
 
         self.solver = solver
 
-    def solve(self):
+    def solve(self) -> None:
         """Solves the PuLP problem."""
 
         self.prob.solve(self.solver)
 
-    def show_status(self):
+    def show_status(self) -> None:
         print(
             f"Problem status: {LpStatus[self.prob.status]}\nObective value: {self.prob.objective.value()}"
         )
 
-    def savefile(self):
+    def savefile(self) -> None:
         """Saves the problem to disk as Mathematical Programming System file."""
 
         path = f"lp_problems/pulp_{self.inst.name}.mps"
         try:
             self.prob.writeMPS(path)
             print(f"Problem saved to {path}")
-        except:
-            print(f"Failed saving to file!")
+        except (OSError, ValueError, RuntimeError):
+            print("Failed saving to file!")
 
 
 class Gurobi_Problem:
-    def __init__(self, inst):
+    def __init__(self, inst: Instance) -> None:
         """Instantiates a PuLP problem.
 
         Args:
             inst (Instance): the instance to solve
         """
         self.inst = inst
-        self.m = None
+        self.m: Any = None
 
-        self.B_vars = {}  # task beginnings vars
-        self.C_vars = {}  # task completions vars
-        self.T_vars = {}  # tardiness vars
-        self.U_vars = {}  # unit penalty vars
-        self.mach_assign = {}  # machine assignment vars
-        self.op_assign = {}  # operator assignment vars
+        self.B_vars: dict[Any, Any] = {}  # task beginnings vars
+        self.C_vars: dict[Any, Any] = {}  # task completions vars
+        self.T_vars: dict[Any, Any] = {}  # tardiness vars
+        self.U_vars: dict[Any, Any] = {}  # unit penalty vars
+        self.mach_assign: dict[Any, Any] = {}  # machine assignment vars
+        self.op_assign: dict[Any, Any] = {}  # operator assignment vars
 
-    def generate_problem(self):
+    def generate_problem(self) -> None:
         """Generates the Gurobi problem."""
 
         print(f"Generating Gurobi problem for {self.inst.name}...")
 
         self.m = gp.Model(self.inst.name)
 
-        print(f"Greedy solving for time horizon estimation")
+        print("Greedy solving for time horizon estimation")
         self.inst.greedy_solve()
         T = int(max([j.C() for j in self.inst.jobs.values()]) * 1.25)
 
-        B_vars = {}
-        C_vars = {}
-        T_vars = {}
-        U_vars = {}
+        B_vars: dict[Any, Any] = {}
+        C_vars: dict[Any, Any] = {}
+        T_vars: dict[Any, Any] = {}
+        U_vars: dict[Any, Any] = {}
 
         print("Adding jobs/tasks variables and constraints...")
 
@@ -454,13 +462,13 @@ class Gurobi_Problem:
             range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
         )
 
-        for t, tid in running_after_B.keys():
+        for t, tid in running_after_B:
             self.m.addConstr((running_after_B[t, tid] == 0) >> (t <= B_vars[tid] - 1))
             self.m.addConstr((running_after_B[t, tid] == 1) >> (t >= B_vars[tid]))
-        for t, tid in running_before_C.keys():
+        for t, tid in running_before_C:
             self.m.addConstr((running_before_C[t, tid] == 0) >> (t >= C_vars[tid]))
             self.m.addConstr((running_before_C[t, tid] == 1) >> (t <= C_vars[tid] - 1))
-        for t, tid in running.keys():
+        for t, tid in running:
             self.m.addConstr(
                 running[t, tid]
                 == gp.and_(running_after_B[t, tid], running_before_C[t, tid])
@@ -468,26 +476,22 @@ class Gurobi_Problem:
 
         print("Creating machines and operators task assignments tables...")
 
-        mach_assign = {}
+        mach_assign: dict[Any, Any] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                mids = set(
-                    [worker.mid for worker in task.workers]
-                )  # unique machine ids that can process this task
+                mids = {worker.mid for worker in task.workers}
                 for mid in mids:
                     mach_assign[tid, mid] = self.m.addVar(
                         name=f"task_{tid}_machine_{mid}", vtype=GRB.BINARY
                     )
                 self.m.addConstr(sum([mach_assign[tid, mid] for mid in mids]) == 1)
 
-        oper_assign = {}
+        oper_assign: dict[Any, Any] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                oids = set(
-                    [worker.oid for worker in task.workers]
-                )  # unique operator ids that can process this task
+                oids = {worker.oid for worker in task.workers}
                 for oid in oids:
                     oper_assign[tid, oid] = self.m.addVar(
                         name=f"task_{tid}_operator_{oid}", vtype=GRB.BINARY
@@ -502,14 +506,14 @@ class Gurobi_Problem:
         oper_business = self.m.addVars(
             range(1, T + 1), range(1, self.inst.O + 1), vtype=GRB.INTEGER
         )
-        for t, mid in mach_business.keys():
+        for t, mid in mach_business:
             self.m.addConstr(mach_business[t, mid] <= 1)
-        for t, oid in oper_business.keys():
+        for t, oid in oper_business:
             self.m.addConstr(oper_business[t, oid] <= 1)
 
-        for t, mid in mach_business.keys():
+        for t, mid in mach_business:
             assigned_and_running = []
-            for tid in [k[0] for k in mach_assign.keys() if k[1] == mid]:
+            for tid in [k[0] for k in mach_assign if k[1] == mid]:
                 assigned_and_running.append(self.m.addVar(vtype=GRB.INTEGER))
                 self.m.addConstr(
                     assigned_and_running[-1]
@@ -517,9 +521,9 @@ class Gurobi_Problem:
                 )
             self.m.addConstr(mach_business[t, mid] == sum(assigned_and_running))
 
-        for t, oid in oper_business.keys():
+        for t, oid in oper_business:
             assigned_and_running = []
-            for tid in [k[0] for k in oper_assign.keys() if k[1] == oid]:
+            for tid in [k[0] for k in oper_assign if k[1] == oid]:
                 assigned_and_running.append(self.m.addVar(vtype=GRB.INTEGER))
                 self.m.addConstr(
                     assigned_and_running[-1]
@@ -554,9 +558,9 @@ class Gurobi_Problem:
         )
         self.mach_assign, self.oper_assign = mach_assign, oper_assign
 
-        print(f"Gurobi problem generated.")
+        print("Gurobi problem generated.")
 
-    def warmup(self):
+    def warmup(self) -> None:
         """Sets intial values for variables to solve with warm start."""
 
         # set greedy beginning times
@@ -578,12 +582,12 @@ class Gurobi_Problem:
             else:
                 v.Start = 0
 
-    def solve(self):
+    def solve(self) -> None:
         """Solves the PuLP problem."""
 
         self.m.optimize()
 
-    def show_status(self):
+    def show_status(self) -> None:
         sc = gp.StatusConstClass
         status_codes = {
             sc.__dict__[k]: k for k, v in sc.__dict__.items() if isinstance(v, int)
@@ -592,21 +596,18 @@ class Gurobi_Problem:
             f"Problem status: {status_codes[self.m.status]}\nObective value: {self.m.objVal}"
         )
 
-    def savefile(self):
+    def savefile(self) -> None:
         """Saves the problem to disk as Mathematical Programming System file."""
 
         path = f"lp_problems/gurobi_{self.inst.name}.mps"
         try:
             self.m.write(path)
             print(f"Problem saved to {path}")
-        except:
-            print(f"Failed saving to file!")
+        except (OSError, ValueError, RuntimeError):
+            print("Failed saving to file!")
 
 
-from itertools import combinations
-
-
-def export_to_dot_separated(inst, tasks, filename):
+def export_to_dot_separated(inst: Instance, tasks: list[Any], filename: str) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
         f.write('bgcolor="lightgray"\n')
@@ -628,24 +629,28 @@ def export_to_dot_separated(inst, tasks, filename):
                 continue
             # Create edges for shared machines (undirected)
             # compute the intersection of their machines
-            w1 = set([w.mid for w in inst.tasks[t1_id].workers])
-            w2 = set([w.mid for w in inst.tasks[t2_id].workers])
+            w1 = {w.mid for w in inst.tasks[t1_id].workers}
+            w2 = {w.mid for w in inst.tasks[t2_id].workers}
             shared_machines = w1.intersection(w2)
 
-            for m in shared_machines:
-                f.write(f'    {t1_id} -- {t2_id} [label=M{m},color="blue"];\n')
+            f.writelines(
+                f'    {t1_id} -- {t2_id} [label=M{m},color="blue"];\n'
+                for m in shared_machines
+            )
 
             # Create edges for shared individual operators (undirected)
             # compute the intersection of their operators
-            w1 = set([w.oid for w in inst.tasks[t1_id].workers])
-            w2 = set([w.oid for w in inst.tasks[t2_id].workers])
+            w1 = {w.oid for w in inst.tasks[t1_id].workers}
+            w2 = {w.oid for w in inst.tasks[t2_id].workers}
             shared_operators = w1.intersection(w2)
-            for o in shared_operators:
-                f.write(f'    {t1_id} -- {t2_id} [label=O{o}, color="red"];\n')
+            f.writelines(
+                f'    {t1_id} -- {t2_id} [label=O{o}, color="red"];\n'
+                for o in shared_operators
+            )
         f.write("}\n")
 
 
-def export_to_dot_pairs(inst, tasks, filename):
+def export_to_dot_pairs(inst: Instance, tasks: list[Any], filename: str) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
         f.write('bgcolor="lightgray"\n')
@@ -667,18 +672,18 @@ def export_to_dot_pairs(inst, tasks, filename):
             if inst.tasks[t1_id].j == inst.tasks[t2_id].j:
                 continue
             # compute the intersection of their workers
-            w1 = set((w.mid, w.oid) for w in inst.tasks[t1_id].workers)
-            w2 = set((w.mid, w.oid) for w in inst.tasks[t2_id].workers)
+            w1 = {(w.mid, w.oid) for w in inst.tasks[t1_id].workers}
+            w2 = {(w.mid, w.oid) for w in inst.tasks[t2_id].workers}
             shared_workers = w1.intersection(w2)
 
-            for sw in shared_workers:
-                f.write(
-                    f'    {t1_id} -- {t2_id} [label=M{sw[0]}O{sw[1]}, color="black"];\n'
-                )
+            f.writelines(
+                f'    {t1_id} -- {t2_id} [label=M{sw[0]}O{sw[1]}, color="black"];\n'
+                for sw in shared_workers
+            )
         f.write("}\n")
 
 
-def export_to_dot_sets(inst, tasks, filename):
+def export_to_dot_sets(inst: Instance, tasks: list[Any], filename: str) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
         f.write('bgcolor="lightgray"\n')
@@ -702,32 +707,34 @@ def export_to_dot_sets(inst, tasks, filename):
                 continue
             # Create edges for shared machines (undirected)
             # compute the intersection of their machines
-            w1 = set([w.mid for w in inst.tasks[t1_id].workers])
-            w2 = set([w.mid for w in inst.tasks[t2_id].workers])
+            w1 = {w.mid for w in inst.tasks[t1_id].workers}
+            w2 = {w.mid for w in inst.tasks[t2_id].workers}
             shared_machines = w1.intersection(w2)
             edges_ma_dicts[(t1_id, t2_id)] = shared_machines
 
             # Create edges for shared individual operators (undirected)
             # compute the intersection of their operators
-            w1 = set([w.oid for w in inst.tasks[t1_id].workers])
-            w2 = set([w.oid for w in inst.tasks[t2_id].workers])
+            w1 = {w.oid for w in inst.tasks[t1_id].workers}
+            w2 = {w.oid for w in inst.tasks[t2_id].workers}
             shared_operators = w1.intersection(w2)
             edges_op_dicts[(t1_id, t2_id)] = shared_operators
 
         for (t1_id, t2_id), sm in edges_ma_dicts.items():
             if len(sm) > 0:
                 f.write(
-                    f'    {t1_id} -- {t2_id} [label="M{str(sm)}", color="blue", penwidth={len(sm)}];\n'
+                    f'    {t1_id} -- {t2_id} [label="M{sm!s}", color="blue", penwidth={len(sm)}];\n'
                 )
         for (t1_id, t2_id), so in edges_op_dicts.items():
             if len(so) > 0:
                 f.write(
-                    f'    {t1_id} -- {t2_id} [label="O{str(so)}", color="red", penwidth={len(so)}];\n'
+                    f'    {t1_id} -- {t2_id} [label="O{so!s}", color="red", penwidth={len(so)}];\n'
                 )
         f.write("}\n")
 
 
-def export_incompatibilities(inst, tasks, filename, display_tasks=False):
+def export_incompatibilities(
+    inst: Instance, tasks: list[Any], filename: str, display_tasks: bool = False
+) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
         f.write('bgcolor="lightgray"\n')
