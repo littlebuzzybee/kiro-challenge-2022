@@ -2,33 +2,25 @@ from __future__ import annotations
 
 import json
 from itertools import combinations
-from typing import Any
+from typing import Any, cast
 
 import gurobipy as gp
 import numpy as np
 from gurobipy import GRB
 from pulp import LpBinary, LpInteger, LpMinimize, LpProblem, LpStatus, LpVariable, lpSum
+from pydantic import BaseModel, ConfigDict
 
 
-class Job:
-    def __init__(
-        self,
-        inst: Instance,
-        jid: Any,
-        Sj: list[Any],
-        rj: Any,
-        dj: Any,
-        wj: Any,
-        Tj: list[Any],
-    ) -> None:
-        self.inst = inst  # instance
+class Job(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
-        self.id = jid  # job id
-        self.S = Sj  # sequence of id of Tasks (list)
-        self.r = rj  # release date
-        self.d = dj  # due date
-        self.w = wj  # weight
-        self.T = Tj  # list of tasks for this job
+    inst: Instance  # instance
+    id: int  # job id
+    S: list[int]  # sequence of id of Tasks (list)
+    r: int  # release date
+    d: int  # due date
+    w: int  # weight
+    T: list[int]  # list of tasks for this job
 
     def B(self) -> Any:
         return self.inst.tasks[self.S[0]].B  # beginning date
@@ -43,27 +35,26 @@ class Job:
         return self.w * (C + self.inst.alpha * U + self.inst.beta * T)
 
 
-class Task:
-    def __init__(
-        self, tid: Any, p: Any, workers: list[Worker], job: Any
-    ) -> None:
-        self.id = tid  # Task id
-        self.p = p  # processing time
-        self.workers = workers  # possible Workers for this Task (list)
-        self.j = job  # job this Task belongs to
+class Task(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
 
-        self.B: Any = None  # beginning date
-        self.C: Any = None  # completion date
-        self.mid = None  # assigned machine id
-        self.oid = None  # assigned operator id
-        self.running = False  # is running
-        self.done = False  # is completed
+    id: int  # Task id
+    p: int  # processing time
+    workers: list[Worker]  # possible Workers for this Task (list)
+    j: int  # this Task belongs to
+    B: int | None = None  # beginning date
+    C: int | None = None  # completion date
+    mid: int | None = None  # assigned machine id
+    oid: int | None = None  # assigned operator id
+    running: bool = False  # is running
+    done: bool = False  # is completed
 
 
-class Worker:
-    def __init__(self, mid: Any, oid: Any) -> None:
-        self.mid = mid  # machine id
-        self.oid = oid  # operator id
+class Worker(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
+
+    mid: int  # id of Machine used
+    oid: int  # id of Operator working
 
 
 class Instance:
@@ -118,7 +109,7 @@ class Instance:
         for tid in Sj:
             self.task2job[tid] = jid
             tj.append(tid)
-        return Job(self, jid, Sj, rj, dj, wj, tj)
+        return Job(inst=self, id=jid, S=Sj, r=rj, d=dj, w=wj, T=tj)
 
     def parser_task(self, task: dict[str, Any]) -> Task:
         tid = task["task"]
@@ -129,15 +120,15 @@ class Instance:
             mid = machine["machine"]
             for operator in machine["operators"]:
                 oid = operator
-                workers.append(Worker(mid, oid))
-        return Task(tid, p, workers, j)
+                workers.append(Worker(mid=mid, oid=oid))
+        return Task(id=tid, p=p, workers=workers, j=j)
 
     def greedy_solve(self) -> None:
         time = 0
 
         while np.sum([t.done for t in self.tasks.values()]) < self.I:
             for t in self.tasks.values():
-                if t.running and time - t.B >= t.p:
+                if t.running and time - cast(int, t.B) >= t.p:
                     t.running = False  # task ends
                     t.done = True  # task is done
                     self.machines[t.mid] = True  # free machine
