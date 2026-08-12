@@ -25,21 +25,15 @@ ORTOOLS_LIB = $(ORTOOLS_HOME)/lib
 
 JSON_INCLUDE = ./nlohmann
 
-INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE)
-LIBS = -L$(GUROBI_LIB) -L$(GUROBI_INCLUDE)
+INCLUDES = -I$(GUROBI_INCLUDE) -I$(JSON_INCLUDE) -I$(ORTOOLS_INCLUDE)
+LIBS = -L$(GUROBI_LIB) -L$(ORTOOLS_LIB)
 
 
-# Library 
-LDLIBS = -lgurobi_c++ -lgurobi130 -llapack -lblas -larmadillo
+# Solvers & utilities 
+LDLIBS = -lgurobi_c++ -lgurobi130 -llapack -lblas -larmadillo -lortools
 
-# Library dependencies
+# Multithreading
 LDLIBS += -lpthread -lm -ldl -lrt -ltbb
-
-
-INCLUDES += -I$(ORTOOLS_INCLUDE)
-LIBS += -L$(ORTOOLS_LIB)
-LDLIBS += -lortools
-
  
 # a rule for building the program with full debug information
 debug: CXXFLAGS += -g3 -Og #  -g0..3 (g default)
