@@ -10,7 +10,6 @@ dependencies = [
     "ipython>=9.16.1",
     "matplotlib>=3.11.1",
     "mypy>=2.3.0",
-    "networkx>=3.6.1",
     "numpy>=2.5.2",
     "pillow>=12.3.0",
     "pulp>=3.3.2",

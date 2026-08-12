@@ -3,7 +3,6 @@ import subprocess
 from itertools import combinations
 
 import matplotlib.pyplot as plt
-import networkx as nx
 
 from utils import (
     Instance,
