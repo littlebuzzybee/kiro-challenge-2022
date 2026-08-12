@@ -128,6 +128,20 @@ function main_strategy(
            compat_machine_operator_per_task)
 end
 
+function print_summary(result::StrategyResult, instance::SchedulingInstance,
+                       output_path::AbstractString)
+    scheduled = findall(>(0), result.start_time_of_task)
+    makespan = isempty(scheduled) ? 0 : maximum(
+        result.start_time_of_task[scheduled] .+
+        instance.duration_task[scheduled])
+
+    println("\nSolver summary")
+    println("  Objective cost: $(result.sol_cost)")
+    println("  Tasks scheduled: $(length(scheduled))/$(instance.nb_tasks)")
+    println("  Makespan: $(makespan)")
+    println("  Solution written to: $(output_path)")
+end
+
 
 
 instance_file = get(ARGS, 1, "instances/tiny.json")
@@ -151,5 +165,4 @@ open(output_path, "w") do io
     JSON.print(io, solution)
 end
 
-
-result.sol_cost
+print_summary(result, instance, output_path)
