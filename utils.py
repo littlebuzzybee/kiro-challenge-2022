@@ -2,13 +2,59 @@ from __future__ import annotations
 
 import json
 from itertools import combinations
-from typing import Any, cast
+from typing import TypedDict, cast
 
 import gurobipy as gp
 import numpy as np
 from gurobipy import GRB
-from pulp import LpBinary, LpInteger, LpMinimize, LpProblem, LpStatus, LpVariable, lpSum
+from pulp import (
+    LpBinary,
+    LpInteger,
+    LpMinimize,
+    LpProblem,
+    LpSolver,
+    LpStatus,
+    LpVariable,
+    lpSum,
+)
 from pydantic import BaseModel, ConfigDict
+
+
+class JobData(TypedDict):
+    job: int
+    sequence: list[int]
+    release_date: int
+    due_date: int
+    weight: int
+
+
+class MachineData(TypedDict):
+    machine: int
+    operators: list[int]
+
+
+class TaskData(TypedDict):
+    task: int
+    processing_time: int
+    machines: list[MachineData]
+
+
+class InstanceSizeData(TypedDict):
+    nb_jobs: int
+    nb_tasks: int
+    nb_machines: int
+    nb_operators: int
+
+
+class InstanceParametersData(TypedDict):
+    size: InstanceSizeData
+    costs: dict[str, int]
+
+
+class InstanceData(TypedDict):
+    parameters: InstanceParametersData
+    jobs: list[JobData]
+    tasks: list[TaskData]
 
 
 class Job(BaseModel):
@@ -22,17 +68,19 @@ class Job(BaseModel):
     w: int  # weight
     T: list[int]  # list of tasks for this job
 
-    def B(self) -> Any:
-        return self.inst.tasks[self.S[0]].B  # beginning date
+    def B(self) -> int:
+        return cast(int, self.inst.tasks[self.S[0]].B)  # beginning date
 
-    def C(self) -> Any:
-        return self.inst.tasks[self.S[-1]].C  # completion date
+    def C(self) -> int:
+        return cast(int, self.inst.tasks[self.S[-1]].C)  # completion date
 
-    def cost(self) -> Any:
+    def cost(self) -> int:
         C = self.C()
         T = max(C - self.d, 0)
         U = 1 if T > 0 else 0
-        return self.w * (C + self.inst.alpha * U + self.inst.beta * T)
+        alpha = cast(int, self.inst.alpha)
+        beta = cast(int, self.inst.beta)
+        return self.w * (C + alpha * U + beta * T)
 
 
 class Task(BaseModel):
@@ -61,22 +109,22 @@ class Instance:
     def __init__(self, name: str) -> None:
         self.name = name
 
-        self.J: Any = None
-        self.I: Any = None
-        self.M: Any = None
-        self.O: Any = None
-        self.alpha: Any = None
-        self.beta: Any = None
+        self.J: int | None = None
+        self.I: int | None = None
+        self.M: int | None = None
+        self.O: int | None = None
+        self.alpha: int | None = None
+        self.beta: int | None = None
 
-        self.jobs: dict[Any, Job] = {}
-        self.tasks: dict[Any, Task] = {}
-        self.machines: dict[Any, bool] = {}  # machines availabilities
-        self.operators: dict[Any, bool] = {}  # operators availabilities
-        self.task2job: dict[Any, Any] = {}  # task to job mapping
+        self.jobs: dict[int, Job] = {}
+        self.tasks: dict[int, Task] = {}
+        self.machines: dict[int, bool] = {}  # machines availabilities
+        self.operators: dict[int, bool] = {}  # operators availabilities
+        self.task2job: dict[int, int] = {}  # task to job mapping
 
     def load(self, filename: str) -> None:
         with open(filename, "rb") as f:
-            inst = json.load(f)
+            inst: InstanceData = json.load(f)
 
         self.J = inst["parameters"]["size"]["nb_jobs"]
         self.I = inst["parameters"]["size"]["nb_tasks"]
@@ -94,12 +142,12 @@ class Instance:
             self.tasks[tid] = self.parser_task(task)
 
         # set all machines and operators as available
-        for task in self.tasks:
-            for worker in self.tasks[task].workers:
+        for tid in self.tasks:
+            for worker in self.tasks[tid].workers:
                 self.machines[worker.mid] = True
                 self.operators[worker.oid] = True
 
-    def parser_job(self, job: dict[str, Any]) -> Job:
+    def parser_job(self, job: JobData) -> Job:
         jid = job["job"]
         Sj = job["sequence"]
         rj = job["release_date"]
@@ -111,7 +159,7 @@ class Instance:
             tj.append(tid)
         return Job(inst=self, id=jid, S=Sj, r=rj, d=dj, w=wj, T=tj)
 
-    def parser_task(self, task: dict[str, Any]) -> Task:
+    def parser_task(self, task: TaskData) -> Task:
         tid = task["task"]
         p = task["processing_time"]
         j = self.task2job[tid]
@@ -131,8 +179,8 @@ class Instance:
                 if t.running and time - cast(int, t.B) >= t.p:
                     t.running = False  # task ends
                     t.done = True  # task is done
-                    self.machines[t.mid] = True  # free machine
-                    self.operators[t.oid] = True  # free operator
+                    self.machines[cast(int, t.mid)] = True  # free machine
+                    self.operators[cast(int, t.oid)] = True  # free operator
                     t.C = time  # set completion time
 
             for j in self.jobs.values():
@@ -160,13 +208,13 @@ class Instance:
 
             time += 1  # time flows
 
-    def cost(self) -> Any:
+    def cost(self) -> int:
         s = 0
         for job in self.jobs.values():
             C = job.C()
             T = max(C - job.d, 0)
             U = 1 if T > 0 else 0
-            s += job.w * (C + self.alpha * U + self.beta * T)
+            s += job.w * (C + cast(int, self.alpha) * U + cast(int, self.beta) * T)
         return s
 
 
@@ -178,15 +226,19 @@ class PuLP_Problem:
             inst (Instance): the instance to solve
         """
         self.inst = inst
-        self.prob: Any = None
-        self.solver: Any = None
+        self.prob: LpProblem = cast(LpProblem, None)
+        self.solver: LpSolver = cast(LpSolver, None)
 
-        self.B_vars: dict[Any, Any] = {}  # task beginnings vars
-        self.C_vars: dict[Any, Any] = {}  # task completions vars
-        self.T_vars: dict[Any, Any] = {}  # tardiness vars
-        self.U_vars: dict[Any, Any] = {}  # unit penalty vars
-        self.mach_assign: dict[Any, Any] = {}  # machine assignment vars
-        self.op_assign: dict[Any, Any] = {}  # operator assignment vars
+        self.B_vars: dict[int, LpVariable] = {}  # task beginnings vars
+        self.C_vars: dict[int, LpVariable] = {}  # task completions vars
+        self.T_vars: dict[int, LpVariable] = {}  # tardiness vars
+        self.U_vars: dict[int, LpVariable] = {}  # unit penalty vars
+        self.mach_assign: dict[
+            tuple[int, int], LpVariable
+        ] = {}  # machine assignment vars
+        self.op_assign: dict[
+            tuple[int, int], LpVariable
+        ] = {}  # operator assignment vars
 
     def generate_problem(self) -> None:
         """Generates the PuLP problem."""
@@ -198,10 +250,10 @@ class PuLP_Problem:
         # big M
         M = 2 * max([job.d for job in self.inst.jobs.values()])
 
-        B_vars: dict[Any, Any] = {}
-        C_vars: dict[Any, Any] = {}
-        T_vars: dict[Any, Any] = {}
-        U_vars: dict[Any, Any] = {}
+        B_vars: dict[int, LpVariable] = {}
+        C_vars: dict[int, LpVariable] = {}
+        T_vars: dict[int, LpVariable] = {}
+        U_vars: dict[int, LpVariable] = {}
 
         print("Adding jobs/tasks variables and constraints...")
 
@@ -237,7 +289,7 @@ class PuLP_Problem:
 
         print("Adding machines and operators variables and constraints...")
 
-        mach_assign: dict[Any, Any] = {}
+        mach_assign: dict[tuple[int, int], LpVariable] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
@@ -249,7 +301,7 @@ class PuLP_Problem:
                 # each task is assigned to exactly one machine
                 self.prob += lpSum([mach_assign[tid, mid] for mid in mids]) == 1
 
-        op_assign: dict[Any, Any] = {}
+        op_assign: dict[tuple[int, int], LpVariable] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
@@ -347,7 +399,7 @@ class PuLP_Problem:
             else:
                 v.setInitialValue(0, check=True)
 
-    def set_solver(self, solver: Any) -> None:
+    def set_solver(self, solver: LpSolver) -> None:
         """Sets solver for the problem."""
 
         self.solver = solver
@@ -381,14 +433,14 @@ class Gurobi_Problem:
             inst (Instance): the instance to solve
         """
         self.inst = inst
-        self.m: Any = None
+        self.m: gp.Model = cast(gp.Model, None)
 
-        self.B_vars: dict[Any, Any] = {}  # task beginnings vars
-        self.C_vars: dict[Any, Any] = {}  # task completions vars
-        self.T_vars: dict[Any, Any] = {}  # tardiness vars
-        self.U_vars: dict[Any, Any] = {}  # unit penalty vars
-        self.mach_assign: dict[Any, Any] = {}  # machine assignment vars
-        self.op_assign: dict[Any, Any] = {}  # operator assignment vars
+        self.B_vars: dict[int, gp.Var] = {}  # task beginnings vars
+        self.C_vars: dict[int, gp.Var] = {}  # task completions vars
+        self.T_vars: dict[int, gp.Var] = {}  # tardiness vars
+        self.U_vars: dict[int, gp.Var] = {}  # unit penalty vars
+        self.mach_assign: dict[tuple[int, int], gp.Var] = {}  # machine assignment vars
+        self.op_assign: dict[tuple[int, int], gp.Var] = {}  # operator assignment vars
 
     def generate_problem(self) -> None:
         """Generates the Gurobi problem."""
@@ -401,10 +453,10 @@ class Gurobi_Problem:
         self.inst.greedy_solve()
         T = int(max([j.C() for j in self.inst.jobs.values()]) * 1.25)
 
-        B_vars: dict[Any, Any] = {}
-        C_vars: dict[Any, Any] = {}
-        T_vars: dict[Any, Any] = {}
-        U_vars: dict[Any, Any] = {}
+        B_vars: dict[int, gp.Var] = {}
+        C_vars: dict[int, gp.Var] = {}
+        T_vars: dict[int, gp.Var] = {}
+        U_vars: dict[int, gp.Var] = {}
 
         print("Adding jobs/tasks variables and constraints...")
 
@@ -440,13 +492,13 @@ class Gurobi_Problem:
         print("Creating running tables...")
 
         running_after_B = self.m.addVars(
-            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
+            range(1, T + 1), range(1, cast(int, self.inst.I) + 1), vtype=GRB.BINARY
         )
         running_before_C = self.m.addVars(
-            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
+            range(1, T + 1), range(1, cast(int, self.inst.I) + 1), vtype=GRB.BINARY
         )
         running = self.m.addVars(
-            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
+            range(1, T + 1), range(1, cast(int, self.inst.I) + 1), vtype=GRB.BINARY
         )
 
         for t, tid in running_after_B:
@@ -463,7 +515,7 @@ class Gurobi_Problem:
 
         print("Creating machines and operators task assignments tables...")
 
-        mach_assign: dict[Any, Any] = {}
+        mach_assign: dict[tuple[int, int], gp.Var] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
@@ -472,9 +524,14 @@ class Gurobi_Problem:
                     mach_assign[tid, mid] = self.m.addVar(
                         name=f"task_{tid}_machine_{mid}", vtype=GRB.BINARY
                     )
-                self.m.addConstr(sum([mach_assign[tid, mid] for mid in mids]) == 1)
+                self.m.addConstr(
+                    cast(
+                        gp.TempLConstr,
+                        sum([mach_assign[tid, mid] for mid in mids]) == 1,
+                    )
+                )
 
-        oper_assign: dict[Any, Any] = {}
+        oper_assign: dict[tuple[int, int], gp.Var] = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
@@ -483,15 +540,20 @@ class Gurobi_Problem:
                     oper_assign[tid, oid] = self.m.addVar(
                         name=f"task_{tid}_operator_{oid}", vtype=GRB.BINARY
                     )
-                self.m.addConstr(sum([oper_assign[tid, oid] for oid in oids]) == 1)
+                self.m.addConstr(
+                    cast(
+                        gp.TempLConstr,
+                        sum([oper_assign[tid, oid] for oid in oids]) == 1,
+                    )
+                )
 
         print("Creating machines and operators business tables...")
 
         mach_business = self.m.addVars(
-            range(1, T + 1), range(1, self.inst.M + 1), vtype=GRB.INTEGER
+            range(1, T + 1), range(1, cast(int, self.inst.M) + 1), vtype=GRB.INTEGER
         )
         oper_business = self.m.addVars(
-            range(1, T + 1), range(1, self.inst.O + 1), vtype=GRB.INTEGER
+            range(1, T + 1), range(1, cast(int, self.inst.O) + 1), vtype=GRB.INTEGER
         )
         for t, mid in mach_business:
             self.m.addConstr(mach_business[t, mid] <= 1)
@@ -527,7 +589,12 @@ class Gurobi_Problem:
         self.m.setObjective(
             sum(
                 [
-                    wj * (Cj + self.inst.alpha * Uj + self.inst.beta * Tj)
+                    wj
+                    * (
+                        Cj
+                        + cast(int, self.inst.alpha) * Uj
+                        + cast(int, self.inst.beta) * Tj
+                    )
                     for wj, Cj, Uj, Tj in zip(
                         w, JC_vars, U_vars.values(), T_vars.values()
                     )
@@ -552,10 +619,10 @@ class Gurobi_Problem:
 
         # set greedy beginning times
         for k, v in self.B_vars.items():
-            v.Start = self.inst.tasks[k].B
+            v.Start = cast(float, self.inst.tasks[k].B)
         # set greedy completion times
         for k, v in self.C_vars.items():
-            v.Start = self.inst.tasks[k].C
+            v.Start = cast(float, self.inst.tasks[k].C)
         # set greedy machine assignments
         for (tid, mid), v in self.mach_assign.items():
             if self.inst.tasks[tid].mid == mid:
@@ -594,7 +661,7 @@ class Gurobi_Problem:
             print("Failed saving to file!")
 
 
-def export_to_dot_separated(inst: Instance, tasks: list[Any], filename: str) -> None:
+def export_to_dot_separated(inst: Instance, tasks: list[int], filename: str) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
         f.write('bgcolor="lightgray"\n')
@@ -637,7 +704,7 @@ def export_to_dot_separated(inst: Instance, tasks: list[Any], filename: str) -> 
         f.write("}\n")
 
 
-def export_to_dot_pairs(inst: Instance, tasks: list[Any], filename: str) -> None:
+def export_to_dot_pairs(inst: Instance, tasks: list[int], filename: str) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
         f.write('bgcolor="lightgray"\n')
@@ -670,7 +737,7 @@ def export_to_dot_pairs(inst: Instance, tasks: list[Any], filename: str) -> None
         f.write("}\n")
 
 
-def export_to_dot_sets(inst: Instance, tasks: list[Any], filename: str) -> None:
+def export_to_dot_sets(inst: Instance, tasks: list[int], filename: str) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
         f.write('bgcolor="lightgray"\n')
@@ -720,7 +787,7 @@ def export_to_dot_sets(inst: Instance, tasks: list[Any], filename: str) -> None:
 
 
 def export_incompatibilities(
-    inst: Instance, tasks: list[Any], filename: str, display_tasks: bool = False
+    inst: Instance, tasks: list[int], filename: str, display_tasks: bool = False
 ) -> None:
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
