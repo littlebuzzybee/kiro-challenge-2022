@@ -68,18 +68,22 @@ class Job(BaseModel):
     w: int  # weight
     T: list[int]  # list of tasks for this job
 
+    @property
     def B(self) -> int:
         beginning = self.inst.tasks[self.S[0]].B
-        assert beginning is not None
+        if beginning is None:
+            raise RuntimeError(f"Job {self.id} has not started")
         return beginning  # beginning date
 
+    @property
     def C(self) -> int:
         completion = self.inst.tasks[self.S[-1]].C
-        assert completion is not None
+        if completion is None:
+            raise RuntimeError(f"Job {self.id} has not completed")
         return completion  # completion date
 
     def cost(self) -> int:
-        C = self.C()
+        C = self.C
         T = max(C - self.d, 0)
         U = 1 if T > 0 else 0
         assert self.inst.alpha is not None
@@ -221,7 +225,7 @@ class Instance:
     def cost(self) -> int:
         s = 0
         for job in self.jobs.values():
-            C = job.C()
+            C = job.C
             T = max(C - job.d, 0)
             U = 1 if T > 0 else 0
             assert self.alpha is not None
@@ -475,7 +479,7 @@ class Gurobi_Problem:
 
         print("Greedy solving for time horizon estimation")
         self.inst.greedy_solve()
-        T = int(max([j.C() for j in self.inst.jobs.values()]) * 1.25)
+        T = int(max([j.C for j in self.inst.jobs.values()]) * 1.25)
 
         B_vars: dict[int, gp.Var] = {}
         C_vars: dict[int, gp.Var] = {}
