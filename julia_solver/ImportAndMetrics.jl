@@ -3,6 +3,10 @@ using LinearAlgebra;
 using DataStructures;
 # using DataFrames;
 
+# Command-line paths are interpreted relative to the directory from which Julia
+# was launched, as is conventional for command-line tools.
+resolve_path(path::AbstractString) = abspath(normpath(path))
+
 # Alias pour les types de données
 MachineId  = UInt8;
 OperatorId = UInt8;
@@ -14,8 +18,9 @@ Weight     = Int64;
 # des Δt sont mesurés et peuvent être négatifs ! Penser aux opérations et aux comparaisons !
 
 
-
-function import_init(file::String)
+function import_init(file::AbstractString)
+    file = normpath(file)
+    isfile(file) || throw(ArgumentError("Instance file not found: $file"))
     instance = JSON.parsefile(file)
 
     parameters = instance["parameters"]
@@ -85,9 +90,6 @@ function import_init(file::String)
             job_of_task
 end
 
-
-
-
 function importance(
     Δt::TimeUnit, γ::JobId, α::Int, β::Int,
     jobs_task_sequences::Dict{JobId, Queue{TaskId}},
@@ -132,11 +134,3 @@ function solution_cost(
     end
     return S
 end
-
-
-
-
-windows_path = "C:/Users/matth/Documents/GitHub/kiro-challenge-2022/";
-linux_path   = "/media/matthias/Work/GitHub/kiro-challenge-2022/";
-
-path = linux_path; # à changer selon la plateforme si besoin

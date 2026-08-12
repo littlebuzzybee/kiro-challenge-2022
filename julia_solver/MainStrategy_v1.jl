@@ -1,9 +1,6 @@
-include("ImportAndMetrics.jl")
+include(joinpath(@__DIR__, "ImportAndMetrics.jl"))
 
-include("LocalDecision.jl")
-
-ENV["GUROBI_JL_USE_GUROBI_JLL"] = "false"
-ENV["GUROBI_HOME"] = "/opt/gurobi1200/linux64"
+include(joinpath(@__DIR__, "LocalDecision.jl"))
 
 using JuMP
 using Gurobi
@@ -60,6 +57,9 @@ end
 
 
 
+instance_file = get(ARGS, 1, "instances/tiny.json")
+instance_data = import_init(resolve_path(instance_file));
+
 duration_task,
 compat_machine_operator_per_task,
 α, β,
@@ -72,7 +72,7 @@ jobs_weights,
 jobs_release_date,
 jobs_due_date,
 last_task_of_jobs,
-job_of_task = import_init(path*"instances/tiny.json");
+job_of_task = instance_data;
 
 
 
@@ -88,4 +88,3 @@ job_of_task = import_init(path*"instances/tiny.json");
                 jobs_due_date,
                 last_task_of_jobs,
                 job_of_task);
-
