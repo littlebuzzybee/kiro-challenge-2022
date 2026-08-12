@@ -45,10 +45,8 @@ class Job:
 
 class Task:
     def __init__(
-        self, inst: Instance, tid: Any, p: Any, workers: list[Worker], job: Any
+        self, tid: Any, p: Any, workers: list[Worker], job: Any
     ) -> None:
-        self.inst = inst  # instance
-
         self.id = tid  # Task id
         self.p = p  # processing time
         self.workers = workers  # possible Workers for this Task (list)
@@ -63,9 +61,7 @@ class Task:
 
 
 class Worker:
-    def __init__(self, inst: Instance, mid: Any, oid: Any) -> None:
-        self.inst = inst  # instance
-
+    def __init__(self, mid: Any, oid: Any) -> None:
         self.mid = mid  # machine id
         self.oid = oid  # operator id
 
@@ -133,8 +129,8 @@ class Instance:
             mid = machine["machine"]
             for operator in machine["operators"]:
                 oid = operator
-                workers.append(Worker(self, mid, oid))
-        return Task(self, tid, p, workers, j)
+                workers.append(Worker(mid, oid))
+        return Task(tid, p, workers, j)
 
     def greedy_solve(self) -> None:
         time = 0
