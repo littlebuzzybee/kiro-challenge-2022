@@ -60,19 +60,9 @@ end
 instance_file = get(ARGS, 1, "instances/tiny.json")
 instance_data = import_init(resolve_path(instance_file));
 
-duration_task,
-compat_machine_operator_per_task,
-α, β,
-nb_machines,
-nb_tasks,
-nb_jobs,
-nb_operators,
-jobs_task_sequences,
-jobs_weights,
-jobs_release_date,
-jobs_due_date,
-last_task_of_jobs,
-job_of_task = instance_data;
+(; duration_task, compat_machine_operator_per_task, α, β, nb_machines,
+   nb_tasks, nb_jobs, nb_operators, jobs_task_sequences, jobs_weights,
+   jobs_release_date, jobs_due_date, last_task_of_jobs, job_of_task) = instance_data;
 
 
 

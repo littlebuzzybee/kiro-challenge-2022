@@ -2,22 +2,13 @@ include(joinpath(@__DIR__, "ImportAndMetrics.jl"));
 
 # fonction principale du programme qui calcule la stratégie à adopter
 function main_strategy(
-        compat_machine_operator_per_task::Array{Bool, 3},
-        α                    ::Int,
-        β                    ::Int,
-        duration_task        ::Vector{TimeUnit},
-        nb_machines          ::MachineId,
-        nb_tasks             ::TaskId,
-        nb_jobs              ::JobId,
-        nb_operators         ::OperatorId,
-        jobs_task_sequences  ::Dict{JobId, Queue{TaskId}},
-        jobs_weights         ::Vector{Weight},
-        jobs_release_date    ::Vector{TimeUnit},
-        jobs_due_date        ::Vector{TimeUnit},
-        last_task_of_jobs    ::Vector{TaskId},
-        job_of_task          ::Vector{JobId};
+        instance::SchedulingInstance;
         log_path             ::AbstractString = resolve_path("solutions/julia_solve.log")
     )
+
+    (; compat_machine_operator_per_task, α, β, duration_task, nb_machines,
+       nb_tasks, nb_jobs, nb_operators, jobs_task_sequences, jobs_weights,
+       jobs_release_date, jobs_due_date, last_task_of_jobs, job_of_task) = instance
 
     jobs_completion_time    = zeros(TimeUnit, nb_jobs)
     nb_tasks_per_job        = zeros(TaskId, nb_jobs)
@@ -132,9 +123,9 @@ function main_strategy(
     close(log_file);
 
     sol_cost = solution_cost(nb_jobs, jobs_weights, start_time_of_task, duration_task, jobs_due_date, jobs_completion_time, last_task_of_jobs, α, β);
-    return sol_cost, start_time_of_task, machine_choice_of_task,
+    return StrategyResult(sol_cost, start_time_of_task, machine_choice_of_task,
            operator_choice_of_task, busy_resources, jobs_release_date,
-           compat_machine_operator_per_task
+           compat_machine_operator_per_task)
 end
 
 
@@ -144,46 +135,21 @@ output_file = get(ARGS, 2, "solutions/tiny_sol.json")
 instance_path = resolve_path(instance_file)
 output_path = resolve_path(output_file)
 
-duration_task,
-compat_machine_operator_per_task,
-α, β,
-nb_machines,
-nb_tasks,
-nb_jobs,
-nb_operators,
-jobs_task_sequences,
-jobs_weights,
-jobs_release_date,
-jobs_due_date,
-last_task_of_jobs,
-job_of_task = import_init(instance_path);
+instance = import_init(instance_path)
 
 
 
-@time sol_cost, start_time_of_task, machine_choice_of_task,
-      operator_choice_of_task, busy_resources, jobs_release_date,
-      compat_machine_operator_per_task = main_strategy(compat_machine_operator_per_task,
-                α, β, duration_task,
-                nb_machines,
-                nb_tasks,
-                nb_jobs,
-                nb_operators,
-                jobs_task_sequences,
-                jobs_weights,
-                jobs_release_date,
-                jobs_due_date,
-                last_task_of_jobs,
-                job_of_task;
-                log_path=output_path * ".log");
+result = @time main_strategy(instance; log_path=output_path * ".log")
 
 solution = [Dict("task" => Int(τ),
-                 "start" => Int(start_time_of_task[τ]),
-                 "machine" => Int(machine_choice_of_task[τ]),
-                 "operator" => Int(operator_choice_of_task[τ])) for τ in 1:nb_tasks]
+                 "start" => Int(result.start_time_of_task[τ]),
+                 "machine" => Int(result.machine_choice_of_task[τ]),
+                 "operator" => Int(result.operator_choice_of_task[τ]))
+            for τ in 1:instance.nb_tasks]
 mkpath(dirname(output_path))
 open(output_path, "w") do io
     JSON.print(io, solution)
 end
 
 
-sol_cost
+result.sol_cost

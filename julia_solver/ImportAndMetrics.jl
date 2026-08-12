@@ -15,6 +15,33 @@ JobId      = UInt16;
 TimeUnit   = Int64;
 Weight     = Int64;
 
+struct SchedulingInstance
+    duration_task::Vector{TimeUnit}
+    compat_machine_operator_per_task::Array{Bool, 3}
+    α::Int64
+    β::Int64
+    nb_machines::MachineId
+    nb_tasks::TaskId
+    nb_jobs::JobId
+    nb_operators::OperatorId
+    jobs_task_sequences::Dict{JobId, Queue{TaskId}}
+    jobs_weights::Vector{Weight}
+    jobs_release_date::Vector{TimeUnit}
+    jobs_due_date::Vector{TimeUnit}
+    last_task_of_jobs::Vector{TaskId}
+    job_of_task::Vector{JobId}
+end
+
+struct StrategyResult
+    sol_cost::Number
+    start_time_of_task::Vector{TimeUnit}
+    machine_choice_of_task::Vector{MachineId}
+    operator_choice_of_task::Vector{OperatorId}
+    busy_resources::Matrix{Bool}
+    jobs_release_date::Vector{TimeUnit}
+    compat_machine_operator_per_task::Array{Bool, 3}
+end
+
 # des Δt sont mesurés et peuvent être négatifs ! Penser aux opérations et aux comparaisons !
 
 
@@ -80,14 +107,10 @@ function import_init(file::AbstractString)
     
 
 
-    return duration_task, compat_machine_operator_per_task,
+    return SchedulingInstance(duration_task, compat_machine_operator_per_task,
             α, β, nb_machines, nb_tasks, nb_jobs, nb_operators,
-            jobs_task_sequences,
-            jobs_weights,
-            jobs_release_date,
-            jobs_due_date,
-            last_task_of_jobs,
-            job_of_task
+            jobs_task_sequences, jobs_weights, jobs_release_date,
+            jobs_due_date, last_task_of_jobs, job_of_task)
 end
 
 function importance(
