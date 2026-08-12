@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from itertools import combinations
-from typing import TypedDict, cast
+from typing import TypedDict
 
 import gurobipy as gp
 import numpy as np
@@ -549,10 +549,7 @@ class Gurobi_Problem:
                         name=f"task_{tid}_machine_{mid}", vtype=GRB.BINARY
                     )
                 self.m.addConstr(
-                    cast(
-                        gp.TempLConstr,
-                        sum([mach_assign[tid, mid] for mid in mids]) == 1,
-                    )
+                    gp.quicksum(mach_assign[tid, mid] for mid in mids) == 1
                 )
 
         oper_assign: dict[tuple[int, int], gp.Var] = {}
@@ -565,10 +562,7 @@ class Gurobi_Problem:
                         name=f"task_{tid}_operator_{oid}", vtype=GRB.BINARY
                     )
                 self.m.addConstr(
-                    cast(
-                        gp.TempLConstr,
-                        sum([oper_assign[tid, oid] for oid in oids]) == 1,
-                    )
+                    gp.quicksum(oper_assign[tid, oid] for oid in oids) == 1
                 )
 
         print("Creating machines and operators business tables...")
