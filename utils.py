@@ -69,17 +69,23 @@ class Job(BaseModel):
     T: list[int]  # list of tasks for this job
 
     def B(self) -> int:
-        return cast(int, self.inst.tasks[self.S[0]].B)  # beginning date
+        beginning = self.inst.tasks[self.S[0]].B
+        assert beginning is not None
+        return beginning  # beginning date
 
     def C(self) -> int:
-        return cast(int, self.inst.tasks[self.S[-1]].C)  # completion date
+        completion = self.inst.tasks[self.S[-1]].C
+        assert completion is not None
+        return completion  # completion date
 
     def cost(self) -> int:
         C = self.C()
         T = max(C - self.d, 0)
         U = 1 if T > 0 else 0
-        alpha = cast(int, self.inst.alpha)
-        beta = cast(int, self.inst.beta)
+        assert self.inst.alpha is not None
+        assert self.inst.beta is not None
+        alpha = self.inst.alpha
+        beta = self.inst.beta
         return self.w * (C + alpha * U + beta * T)
 
 
@@ -176,12 +182,16 @@ class Instance:
 
         while np.sum([t.done for t in self.tasks.values()]) < self.I:
             for t in self.tasks.values():
-                if t.running and time - cast(int, t.B) >= t.p:
-                    t.running = False  # task ends
-                    t.done = True  # task is done
-                    self.machines[cast(int, t.mid)] = True  # free machine
-                    self.operators[cast(int, t.oid)] = True  # free operator
-                    t.C = time  # set completion time
+                if t.running:
+                    assert t.B is not None
+                    assert t.mid is not None
+                    assert t.oid is not None
+                    if time - t.B >= t.p:
+                        t.running = False  # task ends
+                        t.done = True  # task is done
+                        self.machines[t.mid] = True  # free machine
+                        self.operators[t.oid] = True  # free operator
+                        t.C = time  # set completion time
 
             for j in self.jobs.values():
                 if time >= j.r:  # it is past the release date of this job
@@ -214,7 +224,9 @@ class Instance:
             C = job.C()
             T = max(C - job.d, 0)
             U = 1 if T > 0 else 0
-            s += job.w * (C + cast(int, self.alpha) * U + cast(int, self.beta) * T)
+            assert self.alpha is not None
+            assert self.beta is not None
+            s += job.w * (C + self.alpha * U + self.beta * T)
         return s
 
 
@@ -226,8 +238,8 @@ class PuLP_Problem:
             inst (Instance): the instance to solve
         """
         self.inst = inst
-        self.prob: LpProblem = cast(LpProblem, None)
-        self.solver: LpSolver = cast(LpSolver, None)
+        self.prob: LpProblem | None = None
+        self.solver: LpSolver | None = None
 
         self.B_vars: dict[int, LpVariable] = {}  # task beginnings vars
         self.C_vars: dict[int, LpVariable] = {}  # task completions vars
@@ -373,12 +385,15 @@ class PuLP_Problem:
         print("PuLP problem generated.")
 
     def show_info(self) -> None:
+        assert self.prob is not None
         print(
             f"Problem {self.prob.name} has {self.prob.numVariables()} variables and {self.prob.numConstraints()} constraints"
         )
 
     def warmup(self) -> None:
         """Sets intial values for variables to solve with warm start."""
+
+        assert self.prob is not None
 
         # set greedy beginning times
         for k, v in self.B_vars.items():
@@ -407,9 +422,11 @@ class PuLP_Problem:
     def solve(self) -> None:
         """Solves the PuLP problem."""
 
+        assert self.prob is not None
         self.prob.solve(self.solver)
 
     def show_status(self) -> None:
+        assert self.prob is not None
         print(
             f"Problem status: {LpStatus[self.prob.status]}\nObective value: {self.prob.objective.value()}"
         )
@@ -417,6 +434,7 @@ class PuLP_Problem:
     def savefile(self) -> None:
         """Saves the problem to disk as Mathematical Programming System file."""
 
+        assert self.prob is not None
         path = f"lp_problems/pulp_{self.inst.name}.mps"
         try:
             self.prob.writeMPS(path)
@@ -433,7 +451,7 @@ class Gurobi_Problem:
             inst (Instance): the instance to solve
         """
         self.inst = inst
-        self.m: gp.Model = cast(gp.Model, None)
+        self.m: gp.Model | None = None
 
         self.B_vars: dict[int, gp.Var] = {}  # task beginnings vars
         self.C_vars: dict[int, gp.Var] = {}  # task completions vars
@@ -444,6 +462,12 @@ class Gurobi_Problem:
 
     def generate_problem(self) -> None:
         """Generates the Gurobi problem."""
+
+        assert self.inst.I is not None
+        assert self.inst.M is not None
+        assert self.inst.O is not None
+        assert self.inst.alpha is not None
+        assert self.inst.beta is not None
 
         print(f"Generating Gurobi problem for {self.inst.name}...")
 
@@ -492,13 +516,13 @@ class Gurobi_Problem:
         print("Creating running tables...")
 
         running_after_B = self.m.addVars(
-            range(1, T + 1), range(1, cast(int, self.inst.I) + 1), vtype=GRB.BINARY
+            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
         )
         running_before_C = self.m.addVars(
-            range(1, T + 1), range(1, cast(int, self.inst.I) + 1), vtype=GRB.BINARY
+            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
         )
         running = self.m.addVars(
-            range(1, T + 1), range(1, cast(int, self.inst.I) + 1), vtype=GRB.BINARY
+            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
         )
 
         for t, tid in running_after_B:
@@ -550,10 +574,10 @@ class Gurobi_Problem:
         print("Creating machines and operators business tables...")
 
         mach_business = self.m.addVars(
-            range(1, T + 1), range(1, cast(int, self.inst.M) + 1), vtype=GRB.INTEGER
+            range(1, T + 1), range(1, self.inst.M + 1), vtype=GRB.INTEGER
         )
         oper_business = self.m.addVars(
-            range(1, T + 1), range(1, cast(int, self.inst.O) + 1), vtype=GRB.INTEGER
+            range(1, T + 1), range(1, self.inst.O + 1), vtype=GRB.INTEGER
         )
         for t, mid in mach_business:
             self.m.addConstr(mach_business[t, mid] <= 1)
@@ -589,12 +613,7 @@ class Gurobi_Problem:
         self.m.setObjective(
             sum(
                 [
-                    wj
-                    * (
-                        Cj
-                        + cast(int, self.inst.alpha) * Uj
-                        + cast(int, self.inst.beta) * Tj
-                    )
+                    wj * (Cj + self.inst.alpha * Uj + self.inst.beta * Tj)
                     for wj, Cj, Uj, Tj in zip(
                         w, JC_vars, U_vars.values(), T_vars.values()
                     )
@@ -617,12 +636,18 @@ class Gurobi_Problem:
     def warmup(self) -> None:
         """Sets intial values for variables to solve with warm start."""
 
+        assert self.m is not None
+
         # set greedy beginning times
         for k, v in self.B_vars.items():
-            v.Start = cast(float, self.inst.tasks[k].B)
+            beginning = self.inst.tasks[k].B
+            assert beginning is not None
+            v.Start = beginning
         # set greedy completion times
         for k, v in self.C_vars.items():
-            v.Start = cast(float, self.inst.tasks[k].C)
+            completion = self.inst.tasks[k].C
+            assert completion is not None
+            v.Start = completion
         # set greedy machine assignments
         for (tid, mid), v in self.mach_assign.items():
             if self.inst.tasks[tid].mid == mid:
@@ -639,9 +664,11 @@ class Gurobi_Problem:
     def solve(self) -> None:
         """Solves the PuLP problem."""
 
+        assert self.m is not None
         self.m.optimize()
 
     def show_status(self) -> None:
+        assert self.m is not None
         sc = gp.StatusConstClass
         status_codes = {
             sc.__dict__[k]: k for k, v in sc.__dict__.items() if isinstance(v, int)
@@ -653,6 +680,7 @@ class Gurobi_Problem:
     def savefile(self) -> None:
         """Saves the problem to disk as Mathematical Programming System file."""
 
+        assert self.m is not None
         path = f"lp_problems/gurobi_{self.inst.name}.mps"
         try:
             self.m.write(path)
