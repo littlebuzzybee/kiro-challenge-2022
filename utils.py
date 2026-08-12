@@ -1,6 +1,7 @@
 import json
-import numpy as np
+
 import gurobipy as gp
+import numpy as np
 from gurobipy import GRB
 from pulp import *
 
@@ -10,48 +11,48 @@ class Job:
         self.inst = inst  # instance
 
         self.id = jid  # job id
-        self.S = Sj    # sequence of id of Tasks (list)
-        self.r = rj    # release date
-        self.d = dj    # due date
-        self.w = wj    # weight
+        self.S = Sj  # sequence of id of Tasks (list)
+        self.r = rj  # release date
+        self.d = dj  # due date
+        self.w = wj  # weight
         self.T = Tj  # list of tasks for this job
 
     def B(self):
         return self.inst.tasks[self.S[0]].B  # beginning date
-    
+
     def C(self):
-        return self.inst.tasks[self.S[-1]].C # completion date
-    
+        return self.inst.tasks[self.S[-1]].C  # completion date
+
     def cost(self):
         C = self.C()
         T = max(C - self.d, 0)
         U = 1 if T > 0 else 0
-        return self.w * (C + self.inst.alpha*U + self.inst.beta*T)
+        return self.w * (C + self.inst.alpha * U + self.inst.beta * T)
 
 
 class Task:
     def __init__(self, inst, tid, p, workers, job):
-        self.inst = inst   # instance
+        self.inst = inst  # instance
 
-        self.id = tid          # Task id
-        self.p = p             # processing time
-        self.workers = workers # possible Workers for this Task (list)
-        self.j = job           # job this Task belongs to
+        self.id = tid  # Task id
+        self.p = p  # processing time
+        self.workers = workers  # possible Workers for this Task (list)
+        self.j = job  # job this Task belongs to
 
-        self.B = None         # beginning date
-        self.C = None         # completion date
-        self.mid = None       # assigned machine id
-        self.oid = None       # assigned operator id
+        self.B = None  # beginning date
+        self.C = None  # completion date
+        self.mid = None  # assigned machine id
+        self.oid = None  # assigned operator id
         self.running = False  # is running
-        self.done = False     # is completed
+        self.done = False  # is completed
 
 
 class Worker:
     def __init__(self, inst, mid, oid):
-        self.inst = inst # instance
+        self.inst = inst  # instance
 
-        self.mid = mid # machine id
-        self.oid = oid # operator id
+        self.mid = mid  # machine id
+        self.oid = oid  # operator id
 
 
 class Instance:
@@ -68,26 +69,26 @@ class Instance:
         self.jobs = {}
         self.tasks = {}
         self.machines = {}  # machines availabilities
-        self.operators = {} # operators availabilities
+        self.operators = {}  # operators availabilities
         self.task2job = {}  # task to job mapping
 
     def load(self, filename):
-        with open(filename, 'rb') as f:
+        with open(filename, "rb") as f:
             inst = json.load(f)
-        
-        self.J = inst['parameters']['size']['nb_jobs']
-        self.I = inst['parameters']['size']['nb_tasks']
-        self.M = inst['parameters']['size']['nb_machines']
-        self.O = inst['parameters']['size']['nb_operators']
-        self.alpha = inst['parameters']['costs']['unit_penalty']
-        self.beta = inst['parameters']['costs']['tardiness']
 
-        for job in inst['jobs']:
-            jid = job['job']
+        self.J = inst["parameters"]["size"]["nb_jobs"]
+        self.I = inst["parameters"]["size"]["nb_tasks"]
+        self.M = inst["parameters"]["size"]["nb_machines"]
+        self.O = inst["parameters"]["size"]["nb_operators"]
+        self.alpha = inst["parameters"]["costs"]["unit_penalty"]
+        self.beta = inst["parameters"]["costs"]["tardiness"]
+
+        for job in inst["jobs"]:
+            jid = job["job"]
             self.jobs[jid] = self.parser_job(job)
 
-        for task in inst['tasks']:
-            tid = task['task']
+        for task in inst["tasks"]:
+            tid = task["task"]
             self.tasks[tid] = self.parser_task(task)
 
         # set all machines and operators as available
@@ -97,11 +98,11 @@ class Instance:
                 self.operators[worker.oid] = True
 
     def parser_job(self, job):
-        jid = job['job']
-        Sj  = job['sequence']
-        rj  = job['release_date']
-        dj  = job['due_date']
-        wj  = job['weight']
+        jid = job["job"]
+        Sj = job["sequence"]
+        rj = job["release_date"]
+        dj = job["due_date"]
+        wj = job["weight"]
         tj = []
         for tid in Sj:
             self.task2job[tid] = jid
@@ -109,48 +110,54 @@ class Instance:
         return Job(self, jid, Sj, rj, dj, wj, tj)
 
     def parser_task(self, task):
-        tid = task['task']
-        p = task['processing_time']
+        tid = task["task"]
+        p = task["processing_time"]
         j = self.task2job[tid]
         workers = []
-        for machine in task['machines']:
-            mid = machine['machine']
-            for operator in machine['operators']:
+        for machine in task["machines"]:
+            mid = machine["machine"]
+            for operator in machine["operators"]:
                 oid = operator
                 workers.append(Worker(self, mid, oid))
         return Task(self, tid, p, workers, j)
-    
+
     def greedy_solve(self):
         time = 0
-        
-        while (np.sum([t.done for t in self.tasks.values()]) < self.I):
+
+        while np.sum([t.done for t in self.tasks.values()]) < self.I:
             for t in self.tasks.values():
                 if t.running:
-                    if (time - t.B >= t.p):
+                    if time - t.B >= t.p:
                         t.running = False  # task ends
-                        t.done = True      # task is done
-                        self.machines[t.mid]  = True # free machine
-                        self.operators[t.oid] = True # free operator
+                        t.done = True  # task is done
+                        self.machines[t.mid] = True  # free machine
+                        self.operators[t.oid] = True  # free operator
                         t.C = time  # set completion time
 
             for j in self.jobs.values():
-                if time >= j.r: # it is past the release date of this job
-                    for (t_idx, tid) in enumerate(j.S): # loop over tasks for this job
-                        t = self.tasks[tid]      # get task from its id
-                        for w in t.workers: # look for a worker (machine, operator) to execute task
-                            if self.operators[w.oid] \
-                            and self.machines[w.mid] \
-                            and not t.running \
-                            and not t.done \
-                            and np.all([self.tasks[tid2].done for tid2 in j.S[:t_idx]]): # all job's previous tasks are done
-                                t.running = True # set task to running
-                                t.B = time       # set beginning time
-                                t.mid = w.mid    # set machine id for task
-                                t.oid = w.oid    # set operator id for task
-                                self.machines[w.mid]  = False   # set machine to busy
-                                self.operators[w.oid] = False   # set operator to busy
+                if time >= j.r:  # it is past the release date of this job
+                    for t_idx, tid in enumerate(j.S):  # loop over tasks for this job
+                        t = self.tasks[tid]  # get task from its id
+                        for w in (
+                            t.workers
+                        ):  # look for a worker (machine, operator) to execute task
+                            if (
+                                self.operators[w.oid]
+                                and self.machines[w.mid]
+                                and not t.running
+                                and not t.done
+                                and np.all(
+                                    [self.tasks[tid2].done for tid2 in j.S[:t_idx]]
+                                )
+                            ):  # all job's previous tasks are done
+                                t.running = True  # set task to running
+                                t.B = time  # set beginning time
+                                t.mid = w.mid  # set machine id for task
+                                t.oid = w.oid  # set operator id for task
+                                self.machines[w.mid] = False  # set machine to busy
+                                self.operators[w.oid] = False  # set operator to busy
 
-            time += 1 # time flows
+            time += 1  # time flows
 
     def cost(self):
         s = 0
@@ -158,9 +165,9 @@ class Instance:
             C = job.C()
             T = max(C - job.d, 0)
             U = 1 if T > 0 else 0
-            s += job.w * (C + self.alpha*U + self.beta*T)
+            s += job.w * (C + self.alpha * U + self.beta * T)
         return s
-    
+
 
 class PuLP_Problem:
     def __init__(self, inst):
@@ -178,7 +185,7 @@ class PuLP_Problem:
         self.T_vars = {}  # tardiness vars
         self.U_vars = {}  # unit penalty vars
         self.mach_assign = {}  # machine assignment vars
-        self.op_assign = {}    # operator assignment vars
+        self.op_assign = {}  # operator assignment vars
 
     def generate_problem(self):
         """Generates the PuLP problem."""
@@ -188,7 +195,7 @@ class PuLP_Problem:
         self.prob = LpProblem(self.inst.name, LpMinimize)
 
         # big M
-        M = 2*max([job.d for job in self.inst.jobs.values()])
+        M = 2 * max([job.d for job in self.inst.jobs.values()])
 
         B_vars = {}
         C_vars = {}
@@ -205,11 +212,13 @@ class PuLP_Problem:
                 B_vars[tid] = Bi
                 C_vars[tid] = Ci
                 self.prob += Ci >= Bi + task.p  # C_i >= B_i + p_i
-            
+
             self.prob += B_vars[job.S[0]] >= job.r  # B_i >= r_{j(i)}
 
             for idx in range(1, len(job.S)):
-                self.prob += B_vars[job.S[idx]] >= C_vars[job.S[idx-1]]  # B_i >= C_{i-1}
+                self.prob += (
+                    B_vars[job.S[idx]] >= C_vars[job.S[idx - 1]]
+                )  # B_i >= C_{i-1}
 
             # tardiness
             Tj = LpVariable(f"T{job.id}", cat=LpInteger)
@@ -231,9 +240,13 @@ class PuLP_Problem:
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                mids = set([worker.mid for worker in task.workers])  # unique machine ids that can process this task
+                mids = set(
+                    [worker.mid for worker in task.workers]
+                )  # unique machine ids that can process this task
                 for mid in mids:
-                    mach_assign[tid, mid] = LpVariable(f"task{tid}_machine{mid}", cat=LpBinary)
+                    mach_assign[tid, mid] = LpVariable(
+                        f"task{tid}_machine{mid}", cat=LpBinary
+                    )
                 # each task is assigned to exactly one machine
                 self.prob += lpSum([mach_assign[tid, mid] for mid in mids]) == 1
 
@@ -241,47 +254,81 @@ class PuLP_Problem:
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                oids = set([worker.oid for worker in task.workers])  # unique operator ids that can process this task
+                oids = set(
+                    [worker.oid for worker in task.workers]
+                )  # unique operator ids that can process this task
                 for oid in oids:
-                    op_assign[tid, oid] = LpVariable(f"task{tid}_operator{oid}", cat=LpBinary)
+                    op_assign[tid, oid] = LpVariable(
+                        f"task{tid}_operator{oid}", cat=LpBinary
+                    )
                 # each task is assigned to exactly one operator
                 self.prob += lpSum([op_assign[tid, oid] for oid in oids]) == 1
 
         for mid in set([k[1] for k in mach_assign.keys()]):  # iterate over machines
-            for (tid1, tid2) in combination(set([k[0] for k in mach_assign.keys() if k[1] == mid]), 2):
+            for tid1, tid2 in combination(
+                set([k[0] for k in mach_assign.keys() if k[1] == mid]), 2
+            ):
                 indic1 = LpVariable(f"machine{mid}_C{tid1}>B{tid2}", cat=LpBinary)
                 indic2 = LpVariable(f"machine{mid}_C{tid2}>B{tid1}", cat=LpBinary)
                 # M has to be greater than complete running time of all jobs/tasks
-                self.prob += C_vars[tid1] - B_vars[tid2] <= M * indic1  # C1 > B2 => indic1 = 1
-                self.prob += C_vars[tid2] - B_vars[tid1] <= M * indic2  # C2 > B1 => indic2 = 1
+                self.prob += (
+                    C_vars[tid1] - B_vars[tid2] <= M * indic1
+                )  # C1 > B2 => indic1 = 1
+                self.prob += (
+                    C_vars[tid2] - B_vars[tid1] <= M * indic2
+                )  # C2 > B1 => indic2 = 1
                 # if sum below is 4, then machine is simultaneously processing both tasks at some point
-                self.prob += indic1 + indic2 + mach_assign[tid1, mid] + mach_assign[tid2, mid] <= 3
+                self.prob += (
+                    indic1 + indic2 + mach_assign[tid1, mid] + mach_assign[tid2, mid]
+                    <= 3
+                )
 
         for oid in set([k[1] for k in op_assign.keys()]):  # iterate over operators
-            for (tid1, tid2) in combination(set([k[0] for k in op_assign.keys() if k[1] == oid]), 2):
+            for tid1, tid2 in combination(
+                set([k[0] for k in op_assign.keys() if k[1] == oid]), 2
+            ):
                 indic1 = LpVariable(f"operator{oid}_C{tid1}>B{tid2}", cat=LpBinary)
                 indic2 = LpVariable(f"operator{oid}_C{tid2}>B{tid1}", cat=LpBinary)
                 # M has to be greater than complete running time of all jobs/tasks
-                self.prob += C_vars[tid1] - B_vars[tid2] <= M * indic1  # C1 > B2 => indic1 = 1
-                self.prob += C_vars[tid2] - B_vars[tid1] <= M * indic2  # C2 > B1 => indic2 = 1
+                self.prob += (
+                    C_vars[tid1] - B_vars[tid2] <= M * indic1
+                )  # C1 > B2 => indic1 = 1
+                self.prob += (
+                    C_vars[tid2] - B_vars[tid1] <= M * indic2
+                )  # C2 > B1 => indic2 = 1
                 # if sum below is 4, then operator is simultaneously handling both tasks at some point
-                self.prob += indic1 + indic2 + op_assign[tid1, oid] + op_assign[tid2, oid] <= 3
+                self.prob += (
+                    indic1 + indic2 + op_assign[tid1, oid] + op_assign[tid2, oid] <= 3
+                )
 
         print(f"Adding objective function...")
 
         w = [job.w for job in self.inst.jobs.values()]  # job weights
-        JC_vars = [C_vars[job.S[-1]] for job in self.inst.jobs.values()]  # job completion dates
-        self.prob += lpSum([wj * (Cj + self.inst.alpha*Uj + self.inst.beta*Tj)
-                       for wj, Cj, Uj, Tj in zip(w, JC_vars, U_vars.values(), T_vars.values())])
-        
+        JC_vars = [
+            C_vars[job.S[-1]] for job in self.inst.jobs.values()
+        ]  # job completion dates
+        self.prob += lpSum(
+            [
+                wj * (Cj + self.inst.alpha * Uj + self.inst.beta * Tj)
+                for wj, Cj, Uj, Tj in zip(w, JC_vars, U_vars.values(), T_vars.values())
+            ]
+        )
+
         # store variables
-        self.B_vars, self.C_vars, self.T_vars, self.U_vars = B_vars, C_vars, T_vars, U_vars
+        self.B_vars, self.C_vars, self.T_vars, self.U_vars = (
+            B_vars,
+            C_vars,
+            T_vars,
+            U_vars,
+        )
         self.mach_assign, self.op_assign = mach_assign, op_assign
 
         print(f"PuLP problem generated.")
 
     def show_info(self):
-        print(f"Problem {self.prob.name} has {self.prob.numVariables()} variables and {self.prob.numConstraints()} constraints")
+        print(
+            f"Problem {self.prob.name} has {self.prob.numVariables()} variables and {self.prob.numConstraints()} constraints"
+        )
 
     def warmup(self):
         """Sets intial values for variables to solve with warm start."""
@@ -312,15 +359,17 @@ class PuLP_Problem:
 
     def solve(self):
         """Solves the PuLP problem."""
-        
+
         self.prob.solve(self.solver)
-        
+
     def show_status(self):
-        print(f"Problem status: {LpStatus[self.prob.status]}\nObective value: {self.prob.objective.value()}")
-        
+        print(
+            f"Problem status: {LpStatus[self.prob.status]}\nObective value: {self.prob.objective.value()}"
+        )
+
     def savefile(self):
         """Saves the problem to disk as Mathematical Programming System file."""
-        
+
         path = f"lp_problems/pulp_{self.inst.name}.mps"
         try:
             self.prob.writeMPS(path)
@@ -344,7 +393,7 @@ class Gurobi_Problem:
         self.T_vars = {}  # tardiness vars
         self.U_vars = {}  # unit penalty vars
         self.mach_assign = {}  # machine assignment vars
-        self.op_assign = {}    # operator assignment vars
+        self.op_assign = {}  # operator assignment vars
 
     def generate_problem(self):
         """Generates the Gurobi problem."""
@@ -352,7 +401,7 @@ class Gurobi_Problem:
         print(f"Generating Gurobi problem for {self.inst.name}...")
 
         self.m = gp.Model(self.inst.name)
-        
+
         print(f"Greedy solving for time horizon estimation")
         self.inst.greedy_solve()
         T = int(max([j.C() for j in self.inst.jobs.values()]) * 1.25)
@@ -361,7 +410,7 @@ class Gurobi_Problem:
         C_vars = {}
         T_vars = {}
         U_vars = {}
-        
+
         print("Adding jobs/tasks variables and constraints...")
 
         for job in self.inst.jobs.values():
@@ -376,7 +425,9 @@ class Gurobi_Problem:
             self.m.addConstr(B_vars[job.S[0]] >= job.r)  # B_i >= r_{j(i)}
 
             for idx in range(1, len(job.S)):
-                self.m.addConstr(B_vars[job.S[idx]] >= C_vars[job.S[idx-1]])  # B_i >= C_{i-1}
+                self.m.addConstr(
+                    B_vars[job.S[idx]] >= C_vars[job.S[idx - 1]]
+                )  # B_i >= C_{i-1}
 
             # tardiness
             Tj = self.m.addVar(name=f"T{job.id}", vtype=GRB.INTEGER)
@@ -391,13 +442,18 @@ class Gurobi_Problem:
             # U_j = 1 if T_j > 0 else 0
             self.m.addConstr((Uj == 0) >> (Tj == 0))
 
-
         print("Creating running tables...")
-        
-        running_after_B  = self.m.addVars(range(1, T+1), range(1, self.inst.I+1), vtype=GRB.BINARY)
-        running_before_C = self.m.addVars(range(1, T+1), range(1, self.inst.I+1), vtype=GRB.BINARY)
-        running          = self.m.addVars(range(1, T+1), range(1, self.inst.I+1), vtype=GRB.BINARY)
-        
+
+        running_after_B = self.m.addVars(
+            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
+        )
+        running_before_C = self.m.addVars(
+            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
+        )
+        running = self.m.addVars(
+            range(1, T + 1), range(1, self.inst.I + 1), vtype=GRB.BINARY
+        )
+
         for t, tid in running_after_B.keys():
             self.m.addConstr((running_after_B[t, tid] == 0) >> (t <= B_vars[tid] - 1))
             self.m.addConstr((running_after_B[t, tid] == 1) >> (t >= B_vars[tid]))
@@ -405,62 +461,97 @@ class Gurobi_Problem:
             self.m.addConstr((running_before_C[t, tid] == 0) >> (t >= C_vars[tid]))
             self.m.addConstr((running_before_C[t, tid] == 1) >> (t <= C_vars[tid] - 1))
         for t, tid in running.keys():
-            self.m.addConstr(running[t, tid] == gp.and_(running_after_B[t, tid], running_before_C[t, tid]))
+            self.m.addConstr(
+                running[t, tid]
+                == gp.and_(running_after_B[t, tid], running_before_C[t, tid])
+            )
 
-        
         print("Creating machines and operators task assignments tables...")
-        
+
         mach_assign = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                mids = set([worker.mid for worker in task.workers])  # unique machine ids that can process this task
+                mids = set(
+                    [worker.mid for worker in task.workers]
+                )  # unique machine ids that can process this task
                 for mid in mids:
-                    mach_assign[tid, mid] = self.m.addVar(name=f"task_{tid}_machine_{mid}", vtype=GRB.BINARY)
+                    mach_assign[tid, mid] = self.m.addVar(
+                        name=f"task_{tid}_machine_{mid}", vtype=GRB.BINARY
+                    )
                 self.m.addConstr(sum([mach_assign[tid, mid] for mid in mids]) == 1)
 
         oper_assign = {}
         for job in self.inst.jobs.values():  # iterate over jobs
             for tid in job.S:  # iterate over tasks
                 task = self.inst.tasks[tid]
-                oids = set([worker.oid for worker in task.workers])  # unique operator ids that can process this task
+                oids = set(
+                    [worker.oid for worker in task.workers]
+                )  # unique operator ids that can process this task
                 for oid in oids:
-                    oper_assign[tid, oid] = self.m.addVar(name=f"task_{tid}_operator_{oid}", vtype=GRB.BINARY)
+                    oper_assign[tid, oid] = self.m.addVar(
+                        name=f"task_{tid}_operator_{oid}", vtype=GRB.BINARY
+                    )
                 self.m.addConstr(sum([oper_assign[tid, oid] for oid in oids]) == 1)
-                
+
         print("Creating machines and operators business tables...")
-        
-        mach_business = self.m.addVars(range(1, T+1), range(1, self.inst.M+1), vtype=GRB.INTEGER)
-        oper_business = self.m.addVars(range(1, T+1), range(1, self.inst.O+1), vtype=GRB.INTEGER)
+
+        mach_business = self.m.addVars(
+            range(1, T + 1), range(1, self.inst.M + 1), vtype=GRB.INTEGER
+        )
+        oper_business = self.m.addVars(
+            range(1, T + 1), range(1, self.inst.O + 1), vtype=GRB.INTEGER
+        )
         for t, mid in mach_business.keys():
             self.m.addConstr(mach_business[t, mid] <= 1)
         for t, oid in oper_business.keys():
             self.m.addConstr(oper_business[t, oid] <= 1)
-            
+
         for t, mid in mach_business.keys():
             assigned_and_running = []
             for tid in [k[0] for k in mach_assign.keys() if k[1] == mid]:
                 assigned_and_running.append(self.m.addVar(vtype=GRB.INTEGER))
-                self.m.addConstr(assigned_and_running[-1] == gp.and_(mach_assign[tid, mid], running[t, tid]))
+                self.m.addConstr(
+                    assigned_and_running[-1]
+                    == gp.and_(mach_assign[tid, mid], running[t, tid])
+                )
             self.m.addConstr(mach_business[t, mid] == sum(assigned_and_running))
 
         for t, oid in oper_business.keys():
             assigned_and_running = []
             for tid in [k[0] for k in oper_assign.keys() if k[1] == oid]:
                 assigned_and_running.append(self.m.addVar(vtype=GRB.INTEGER))
-                self.m.addConstr(assigned_and_running[-1] == gp.and_(oper_assign[tid, oid], running[t, tid]))
+                self.m.addConstr(
+                    assigned_and_running[-1]
+                    == gp.and_(oper_assign[tid, oid], running[t, tid])
+                )
             self.m.addConstr(oper_business[t, oid] == sum(assigned_and_running))
-        
+
         print("Adding objective function...")
-        
+
         w = [job.w for job in self.inst.jobs.values()]  # job weights
-        JC_vars = [C_vars[job.S[-1]] for job in self.inst.jobs.values()]  # job completion dates
-        self.m.setObjective(sum([wj * (Cj + self.inst.alpha*Uj + self.inst.beta*Tj)
-                            for wj, Cj, Uj, Tj in zip(w, JC_vars, U_vars.values(), T_vars.values())]),
-                            GRB.MINIMIZE)
-        
+        JC_vars = [
+            C_vars[job.S[-1]] for job in self.inst.jobs.values()
+        ]  # job completion dates
+        self.m.setObjective(
+            sum(
+                [
+                    wj * (Cj + self.inst.alpha * Uj + self.inst.beta * Tj)
+                    for wj, Cj, Uj, Tj in zip(
+                        w, JC_vars, U_vars.values(), T_vars.values()
+                    )
+                ]
+            ),
+            GRB.MINIMIZE,
+        )
+
         # store variables
-        self.B_vars, self.C_vars, self.T_vars, self.U_vars = B_vars, C_vars, T_vars, U_vars
+        self.B_vars, self.C_vars, self.T_vars, self.U_vars = (
+            B_vars,
+            C_vars,
+            T_vars,
+            U_vars,
+        )
         self.mach_assign, self.oper_assign = mach_assign, oper_assign
 
         print(f"Gurobi problem generated.")
@@ -489,17 +580,21 @@ class Gurobi_Problem:
 
     def solve(self):
         """Solves the PuLP problem."""
-        
+
         self.m.optimize()
-        
+
     def show_status(self):
         sc = gp.StatusConstClass
-        status_codes = {sc.__dict__[k]: k for k, v in sc.__dict__.items() if isinstance(v, int)}
-        print(f"Problem status: {status_codes[self.m.status]}\nObective value: {self.m.objVal}")
-        
+        status_codes = {
+            sc.__dict__[k]: k for k, v in sc.__dict__.items() if isinstance(v, int)
+        }
+        print(
+            f"Problem status: {status_codes[self.m.status]}\nObective value: {self.m.objVal}"
+        )
+
     def savefile(self):
         """Saves the problem to disk as Mathematical Programming System file."""
-        
+
         path = f"lp_problems/gurobi_{self.inst.name}.mps"
         try:
             self.m.write(path)
@@ -508,24 +603,25 @@ class Gurobi_Problem:
             print(f"Failed saving to file!")
 
 
-
 from itertools import combinations
 
 
 def export_to_dot_separated(inst, tasks, filename):
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
-        f.write("bgcolor=\"lightgray\"\n")
+        f.write('bgcolor="lightgray"\n')
         f.write("overlap=false;\n")  # Prevents node overlap
-        f.write("splines=true;\n")   # Makes edges curved for better readability
-        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
-        f.write("ranksep=0.8;\n")    # Increases vertical separation
+        f.write("splines=true;\n")  # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")  # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")  # Increases vertical separation
 
         # Create nodes
         for t in tasks:
             color = "lightblue"
             j_of_t = inst.tasks[t].j
-            f.write(f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n')
+            f.write(
+                f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n'
+            )
 
         for t1_id, t2_id in combinations(tasks, 2):
             if inst.tasks[t1_id].j == inst.tasks[t2_id].j:
@@ -548,20 +644,23 @@ def export_to_dot_separated(inst, tasks, filename):
                 f.write(f'    {t1_id} -- {t2_id} [label=O{o}, color="red"];\n')
         f.write("}\n")
 
+
 def export_to_dot_pairs(inst, tasks, filename):
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
-        f.write("bgcolor=\"lightgray\"\n")
+        f.write('bgcolor="lightgray"\n')
         f.write("overlap=false;\n")  # Prevents node overlap
-        f.write("splines=true;\n")   # Makes edges curved for better readability
-        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
-        f.write("ranksep=0.8;\n")    # Increases vertical separation
+        f.write("splines=true;\n")  # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")  # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")  # Increases vertical separation
 
         # Create nodes
         for t in tasks:
             color = "lightgreen"
             j_of_t = inst.tasks[t].j
-            f.write(f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n')
+            f.write(
+                f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n'
+            )
 
         # Create edges for shared individual workers (undirected)
         for t1_id, t2_id in combinations(tasks, 2):
@@ -573,24 +672,28 @@ def export_to_dot_pairs(inst, tasks, filename):
             shared_workers = w1.intersection(w2)
 
             for sw in shared_workers:
-                f.write(f'    {t1_id} -- {t2_id} [label=M{sw[0]}O{sw[1]}, color="black"];\n')
+                f.write(
+                    f'    {t1_id} -- {t2_id} [label=M{sw[0]}O{sw[1]}, color="black"];\n'
+                )
         f.write("}\n")
 
 
 def export_to_dot_sets(inst, tasks, filename):
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
-        f.write("bgcolor=\"lightgray\"\n")
+        f.write('bgcolor="lightgray"\n')
         f.write("overlap=false;\n")  # Prevents node overlap
-        f.write("splines=true;\n")   # Makes edges curved for better readability
-        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
-        f.write("ranksep=0.8;\n")    # Increases vertical separation
+        f.write("splines=true;\n")  # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")  # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")  # Increases vertical separation
 
         # Create nodes
         for t in tasks:
             color = "lightgreen"
             j_of_t = inst.tasks[t].j
-            f.write(f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n')
+            f.write(
+                f'    {t} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="{color}"];\n'
+            )
 
         edges_ma_dicts = {}
         edges_op_dicts = {}
@@ -604,7 +707,6 @@ def export_to_dot_sets(inst, tasks, filename):
             shared_machines = w1.intersection(w2)
             edges_ma_dicts[(t1_id, t2_id)] = shared_machines
 
-
             # Create edges for shared individual operators (undirected)
             # compute the intersection of their operators
             w1 = set([w.oid for w in inst.tasks[t1_id].workers])
@@ -612,22 +714,27 @@ def export_to_dot_sets(inst, tasks, filename):
             shared_operators = w1.intersection(w2)
             edges_op_dicts[(t1_id, t2_id)] = shared_operators
 
-        for ((t1_id, t2_id), sm) in edges_ma_dicts.items():
+        for (t1_id, t2_id), sm in edges_ma_dicts.items():
             if len(sm) > 0:
-                f.write(f'    {t1_id} -- {t2_id} [label="M{str(sm)}", color="blue", penwidth={len(sm)}];\n')
-        for ((t1_id, t2_id), so) in edges_op_dicts.items():
+                f.write(
+                    f'    {t1_id} -- {t2_id} [label="M{str(sm)}", color="blue", penwidth={len(sm)}];\n'
+                )
+        for (t1_id, t2_id), so in edges_op_dicts.items():
             if len(so) > 0:
-                f.write(f'    {t1_id} -- {t2_id} [label="O{str(so)}", color="red", penwidth={len(so)}];\n')
+                f.write(
+                    f'    {t1_id} -- {t2_id} [label="O{str(so)}", color="red", penwidth={len(so)}];\n'
+                )
         f.write("}\n")
+
 
 def export_incompatibilities(inst, tasks, filename, display_tasks=False):
     with open(filename, "w") as f:
         f.write("graph InstanceGraph {\n")  # Using directed graph
-        f.write("bgcolor=\"lightgray\"\n")
+        f.write('bgcolor="lightgray"\n')
         f.write("overlap=false;\n")  # Prevents node overlap
-        f.write("splines=true;\n")   # Makes edges curved for better readability
-        f.write("nodesep=1.0;\n")    # Increases spacing between nodes
-        f.write("ranksep=0.8;\n")    # Increases vertical separation
+        f.write("splines=true;\n")  # Makes edges curved for better readability
+        f.write("nodesep=1.0;\n")  # Increases spacing between nodes
+        f.write("ranksep=0.8;\n")  # Increases vertical separation
 
         # Create nodes of workers
         worker_nodes = set()
@@ -637,7 +744,9 @@ def export_incompatibilities(inst, tasks, filename, display_tasks=False):
                 if combination not in worker_nodes:
                     h = hash(combination)
                     worker_nodes.add(combination)
-                    f.write(f'    {h} [label="M{w.mid}O{w.oid}", shape="ellipse", style="filled", fillcolor="lightblue"];\n')
+                    f.write(
+                        f'    {h} [label="M{w.mid}O{w.oid}", shape="ellipse", style="filled", fillcolor="lightblue"];\n'
+                    )
 
         # Create edges for incompatible workers
         edges = set()
@@ -650,12 +759,13 @@ def export_incompatibilities(inst, tasks, filename, display_tasks=False):
                 f.write(f'    {h1} -- {h2} [color="blue"];\n')
         f.write("}\n")
 
-        
         # create nodes of tasks
         if display_tasks:
             for t in tasks:
                 j_of_t = inst.tasks[t].j
-                f.write(f'    {hash(t)} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="orange"];\n')
+                f.write(
+                    f'    {hash(t)} [label="T{t}\n(J{j_of_t})", shape="ellipse", style="filled", fillcolor="orange"];\n'
+                )
 
         # Create edges for workers-tasks assignments
         if display_tasks:
@@ -663,4 +773,6 @@ def export_incompatibilities(inst, tasks, filename, display_tasks=False):
                 j_of_t = inst.tasks[t].j
                 for w in inst.tasks[t].workers:
                     combination = (w.mid, w.oid)
-                    f.write(f'    {hash(t)} -- {hash(combination)} [color="orangered"];\n')
+                    f.write(
+                        f'    {hash(t)} -- {hash(combination)} [color="orangered"];\n'
+                    )
