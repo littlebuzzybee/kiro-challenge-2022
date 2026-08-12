@@ -8,7 +8,6 @@ dependencies = [
     "gurobipy>=13.0.2",
     "ipykernel>=7.3.0",
     "ipython>=9.16.1",
-    "matplotlib>=3.11.1",
     "mypy>=2.3.0",
     "numpy>=2.5.2",
     "pillow>=12.3.0",

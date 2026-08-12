@@ -1,13 +1,8 @@
 import random
 import subprocess
-from itertools import combinations
-
-import matplotlib.pyplot as plt
 
 from utils import (
     Instance,
-    Job,
-    Task,
     export_incompatibilities,
     export_to_dot_pairs,
     export_to_dot_separated,
