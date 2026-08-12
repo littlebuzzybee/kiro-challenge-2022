@@ -8,7 +8,7 @@ using CPLEX
 # Import the model
 
 println("Importing model")
-model = read_from_file("gurobi_tiny.mps")
+model = read_from_file("lp_problems/gurobi_tiny.mps")
 # print(model) # beware if the model is too large
 
 # Select the solver and optimize the model
