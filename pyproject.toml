@@ -1,0 +1,15 @@
+[project]
+name = "kiro-challenge-2022"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ipykernel>=7.3.0",
+    "ipython>=9.16.1",
+    "matplotlib>=3.11.1",
+    "networkx>=3.6.1",
+    "numpy>=2.5.2",
+    "pillow>=12.3.0",
+    "pulp>=3.3.2",
+]
